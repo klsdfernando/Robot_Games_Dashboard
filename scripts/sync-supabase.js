@@ -33,7 +33,7 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
 
 // Import local repository
 const Database = require('better-sqlite3');
-const dbPath = path.join(process.cwd(), 'data', 'tournament.db');
+const dbPath = path.join(process.cwd(), 'data', 'robot_games.db');
 if (!fs.existsSync(dbPath)) {
   console.error('❌ Local database not found at:', dbPath);
   process.exit(1);

@@ -417,6 +417,28 @@ export default function AdminRobotRacePage() {
     }
   };
 
+  const handleClearTeams = async (division: 'ALL' | 'SCHOOL' | 'UNIVERSITY' = 'ALL') => {
+    const label = division === 'ALL' ? 'ALL race teams' : `all ${division} category teams`;
+    if (!confirm(`⚠️ Are you sure you want to delete ${label}? This will remove them completely and unschedule any runs.`)) {
+      return;
+    }
+
+    try {
+      setError(null);
+      const res = await fetch(`/api/admin/race/teams?division=${division}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to clear teams');
+      }
+      const data = await res.json();
+      setSuccess(data.message || 'Teams cleared.');
+      await fetchRaceTeams();
+      await fetchSchedule();
+    } catch (err: any) {
+      setError(err.message || 'Error clearing teams');
+    }
+  };
+
   const handleQuickAddToSchedule = async (team: Team) => {
     try {
       setError(null);
@@ -965,6 +987,17 @@ export default function AdminRobotRacePage() {
                 <FileSpreadsheet className="w-3.5 h-3.5" />
                 <span>Import Excel</span>
               </button>
+
+              {raceTeams.length > 0 && (
+                <button
+                  onClick={() => handleClearTeams(teamDivisionFilter)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-rose-950/30 hover:bg-rose-900/40 text-rose-300 border border-rose-500/30 transition-colors"
+                  title="Clear all race teams currently displayed"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Clear {teamDivisionFilter === 'ALL' ? 'All' : teamDivisionFilter} Teams</span>
+                </button>
+              )}
             </div>
           </div>
 

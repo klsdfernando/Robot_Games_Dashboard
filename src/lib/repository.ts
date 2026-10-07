@@ -1890,10 +1890,24 @@ export function createRaceTeam(data: {
 }
 
 export function deleteRaceTeam(id: string): boolean {
-  // Also remove slots matching this team
-  db.prepare('DELETE FROM race_schedule WHERE team_id = ?').run(id);
+  const team = getTeamById(id);
+  // Also remove slots matching this team by id or name
+  if (team?.name) {
+    db.prepare('DELETE FROM race_schedule WHERE team_id = ? OR team_name = ?').run(id, team.name);
+  } else {
+    db.prepare('DELETE FROM race_schedule WHERE team_id = ?').run(id);
+  }
   const res = db.prepare('DELETE FROM teams WHERE id = ?').run(id);
   return res.changes > 0;
+}
+
+export function clearAllRaceTeams(division: 'ALL' | 'SCHOOL' | 'UNIVERSITY' = 'ALL'): { count: number } {
+  const teamsToDelete = getRaceTeams(division);
+  for (const t of teamsToDelete) {
+    db.prepare('DELETE FROM race_schedule WHERE team_id = ? OR team_name = ?').run(t.id, t.name);
+    db.prepare('DELETE FROM teams WHERE id = ?').run(t.id);
+  }
+  return { count: teamsToDelete.length };
 }
 
 export function generateRaceSchedule(params: {
@@ -1909,37 +1923,10 @@ export function generateRaceSchedule(params: {
   const randomize = Boolean(params.randomize);
   const targetDivision = params.categoryDivision || 'ALL';
 
-  // Check race teams
+  // Check race teams (NO hardcoded fake teams)
   let raceTeams = getRaceTeams(targetDivision);
   if (raceTeams.length === 0) {
-    // Seed default race teams divided into School and University
-    const defaultRacers = [
-      // School Category
-      { name: 'Apex Velocity', robotName: 'Mach 1', org: "St. Peter's College", division: 'SCHOOL' as const },
-      { name: 'Circuit Breakers', robotName: 'Lightning Spark', org: 'Royal College', division: 'SCHOOL' as const },
-      { name: 'Turbo Dynamics', robotName: 'Kinetic Rush', org: 'Ananda College', division: 'SCHOOL' as const },
-      { name: 'Aero Striker', robotName: 'Falcon GT', org: 'Trinity College', division: 'SCHOOL' as const },
-      { name: 'Hyperion Racers', robotName: 'Solar Flare', org: 'Nalanda College', division: 'SCHOOL' as const },
-      { name: 'Shadow Drifter', robotName: 'Phantom X', org: 'Wesley College', division: 'SCHOOL' as const },
-      // University Category
-      { name: 'Cyber Phoenix', robotName: 'Inferno Sprint', org: 'Univ. of Moratuwa', division: 'UNIVERSITY' as const },
-      { name: 'Quantum Pulse', robotName: 'Tachyon 9', org: 'Univ. of Peradeniya', division: 'UNIVERSITY' as const },
-      { name: 'Vortex Racers', robotName: 'Cyclone Drift', org: 'SLIIT Computing', division: 'UNIVERSITY' as const },
-      { name: 'Iron Wheel', robotName: 'Titan Rover', org: 'Univ. of Ruhuna', division: 'UNIVERSITY' as const },
-      { name: 'Neon Phantom', robotName: 'Specter Speed', org: 'Univ. of Colombo', division: 'UNIVERSITY' as const },
-      { name: 'Zero Friction', robotName: 'Hydro Glide', org: 'KDU Tech Society', division: 'UNIVERSITY' as const }
-    ];
-
-    for (let i = 0; i < defaultRacers.length; i++) {
-      const r = defaultRacers[i];
-      createRaceTeam({
-        name: r.name,
-        categoryDivision: r.division,
-        robotName: r.robotName,
-        organization: r.org
-      });
-    }
-    raceTeams = getRaceTeams(targetDivision);
+    return [];
   }
 
   // Filter out withdrawn teams

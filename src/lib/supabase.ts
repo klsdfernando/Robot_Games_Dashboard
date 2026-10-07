@@ -115,6 +115,38 @@ export async function testSupabaseConnection(): Promise<{
   }
 }
 
+const CATEGORY_UUID_MAP: Record<string, string> = {
+  'cat-heavy': 'c0000000-0000-0000-0000-000000000001',
+  'cat-heavyweight': 'c0000000-0000-0000-0000-000000000001',
+  'HEAVYWEIGHT': 'c0000000-0000-0000-0000-000000000001',
+  'cat-light': 'c0000000-0000-0000-0000-000000000002',
+  'cat-lightweight': 'c0000000-0000-0000-0000-000000000002',
+  'LIGHTWEIGHT': 'c0000000-0000-0000-0000-000000000002',
+  'cat-race-school': 'c0000000-0000-0000-0000-000000000003',
+  'RACE_SCHOOL': 'c0000000-0000-0000-0000-000000000003',
+  'cat-race-university': 'c0000000-0000-0000-0000-000000000004',
+  'RACE_UNIVERSITY': 'c0000000-0000-0000-0000-000000000004',
+};
+
+/**
+ * Resolves any local string category ID into a valid Supabase UUID.
+ */
+export function resolveSupabaseCategoryId(categoryId?: string, raceCategory?: string | null): string {
+  if (raceCategory === 'UNIVERSITY' || categoryId === 'cat-race-university') {
+    return 'c0000000-0000-0000-0000-000000000004';
+  }
+  if (raceCategory === 'SCHOOL' || categoryId === 'cat-race-school' || categoryId === 'cat-race') {
+    return 'c0000000-0000-0000-0000-000000000003';
+  }
+  if (categoryId && CATEGORY_UUID_MAP[categoryId]) {
+    return CATEGORY_UUID_MAP[categoryId];
+  }
+  if (categoryId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(categoryId)) {
+    return categoryId;
+  }
+  return 'c0000000-0000-0000-0000-000000000003';
+}
+
 /**
  * Upserts a team into Supabase (if Supabase is configured).
  */
@@ -136,18 +168,21 @@ export async function syncTeamToSupabase(team: {
   if (!client) return { success: false, error: 'Supabase not configured' };
 
   try {
+    const targetCatId = resolveSupabaseCategoryId(team.categoryId, team.raceCategory);
+
     const { error } = await client.from('teams').upsert(
       {
         id: team.id,
-        category_id: team.categoryId || 'c0000000-0000-0000-0000-000000000003',
+        category_id: targetCatId,
         name: team.name,
         robot_name: team.robotName || null,
         organization: team.organization || null,
         seed: team.seed || null,
         status: team.status || 'ACTIVE',
+        lives: team.lives !== null && team.lives !== undefined ? team.lives : 2,
         is_withdrawn: Boolean(team.isWithdrawn),
         logo_url: team.logoUrl || null,
-        race_category: team.raceCategory || null,
+        race_category: team.raceCategory || (team.categoryId === 'cat-race-university' ? 'UNIVERSITY' : 'SCHOOL'),
         notes: team.notes || null,
         updated_at: new Date().toISOString()
       },
@@ -163,18 +198,50 @@ export async function syncTeamToSupabase(team: {
 }
 
 /**
- * Deletes a team from Supabase.
+ * Deletes a team from Supabase, removing race schedule slots first to satisfy foreign keys.
  */
 export async function deleteTeamFromSupabase(teamId: string): Promise<{ success: boolean; error?: string }> {
   const client = getSupabaseAdminClient();
   if (!client) return { success: false, error: 'Supabase not configured' };
 
   try {
+    // Delete any dependent race schedule slots first
+    await client.from('race_schedule').delete().eq('team_id', teamId);
     const { error } = await client.from('teams').delete().eq('id', teamId);
     if (error) throw error;
     return { success: true };
   } catch (err: any) {
     console.warn('[Supabase Delete Team Error]:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Clears all race teams and race schedule slots from Supabase.
+ */
+export async function clearRaceTeamsFromSupabase(division?: 'ALL' | 'SCHOOL' | 'UNIVERSITY'): Promise<{ success: boolean; error?: string }> {
+  const client = getSupabaseAdminClient();
+  if (!client) return { success: false, error: 'Supabase not configured' };
+
+  try {
+    const schoolCatId = 'c0000000-0000-0000-0000-000000000003';
+    const uniCatId = 'c0000000-0000-0000-0000-000000000004';
+
+    if (division === 'SCHOOL') {
+      await client.from('race_schedule').delete().eq('category_division', 'SCHOOL');
+      await client.from('teams').delete().eq('category_id', schoolCatId);
+      await client.from('teams').delete().eq('race_category', 'SCHOOL');
+    } else if (division === 'UNIVERSITY') {
+      await client.from('race_schedule').delete().eq('category_division', 'UNIVERSITY');
+      await client.from('teams').delete().eq('category_id', uniCatId);
+      await client.from('teams').delete().eq('race_category', 'UNIVERSITY');
+    } else {
+      await client.from('race_schedule').delete().neq('id', 'NONE');
+      await client.from('teams').delete().in('category_id', [schoolCatId, uniCatId]);
+      await client.from('teams').delete().in('race_category', ['SCHOOL', 'UNIVERSITY']);
+    }
+    return { success: true };
+  } catch (err: any) {
     return { success: false, error: err.message };
   }
 }

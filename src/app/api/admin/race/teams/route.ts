@@ -78,3 +78,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message || 'Failed to create race team' }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  const session = await getAdminSession();
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
+    const { searchParams } = new URL(req.url);
+    const division = (searchParams.get('division') || 'ALL') as 'ALL' | 'SCHOOL' | 'UNIVERSITY';
+
+    const { clearAllRaceTeams } = await import('@/lib/repository');
+    const { clearRaceTeamsFromSupabase } = await import('@/lib/supabase');
+
+    const result = clearAllRaceTeams(division);
+    clearRaceTeamsFromSupabase(division).catch(err => {
+      console.warn('[Supabase Clear Warning]:', err);
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: `Cleared ${result.count} race teams from ${division === 'ALL' ? 'all divisions' : division + ' division'}.`,
+      deletedCount: result.count
+    });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || 'Failed to clear race teams' }, { status: 500 });
+  }
+}
