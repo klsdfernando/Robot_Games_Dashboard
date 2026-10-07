@@ -1,0 +1,282 @@
+'use client';
+
+import React from 'react';
+import { Match, MatchParticipant } from '@/lib/types';
+import { X, Trophy, Swords, ArrowRight, Shield, Clock, AlertCircle } from 'lucide-react';
+
+interface MatchDetailModalProps {
+  match: Match | null;
+  onClose: () => void;
+}
+
+export default function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
+  if (!match) return null;
+
+  const isCompleted = match.status === 'COMPLETED';
+  const isLive = match.status === 'LIVE';
+  const isBye = match.status === 'BYE';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+      <div 
+        className="w-full max-w-lg bg-[#0e1626] border border-white/10 rounded-2xl shadow-2xl overflow-hidden text-slate-200"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-slate-900/60">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-lg bg-sky-500/20 text-sky-400 border border-sky-500/30">
+              <Swords className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 id="modal-title" className="text-base font-bold text-white flex items-center gap-2">
+                <span>Match #{match.matchNumber}</span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-white/10">
+                  {match.stageName || match.stageType}
+                </span>
+              </h2>
+              <p className="text-xs text-slate-400">
+                Category: <span className="text-sky-400 font-semibold">{match.categoryId.includes('heavy') ? 'HEAVYWEIGHT (30kg)' : 'LIGHTWEIGHT (15kg)'}</span>
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={onClose}
+            className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+            aria-label="Close match details modal"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Content Body */}
+        <div className="p-6 space-y-6">
+          {/* Status Banner */}
+          <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-slate-900/80 border border-white/5">
+            <span className="text-xs text-slate-400 font-medium">Match Status</span>
+            <div>
+              {isLive && (
+                <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-live-pulse" />
+                  LIVE NOW IN ARENA
+                </span>
+              )}
+              {isCompleted && (
+                <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  <Trophy className="w-3.5 h-3.5" />
+                  COMPLETED
+                </span>
+              )}
+              {isBye && (
+                <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                  AUTOMATIC BYE
+                </span>
+              )}
+              {!isLive && !isCompleted && !isBye && (
+                <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                  <Clock className="w-3.5 h-3.5" />
+                  SCHEDULED / UPCOMING
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Participants Cards */}
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              {match.participants.length === 3 ? '3-Way Wildcard Battle' : 'Combatants'}
+            </h3>
+
+            {isBye ? (
+              <div className="p-4 rounded-xl bg-purple-950/30 border border-purple-500/30">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-bold text-white text-base">
+                      {match.participants[0]?.team?.name || 'TBD Team'}
+                    </h4>
+                    {match.participants[0]?.team?.robotName && (
+                      <p className="text-xs text-purple-300">
+                        Robot: {match.participants[0].team.robotName}
+                      </p>
+                    )}
+                  </div>
+                  <span className="text-xs font-bold px-2.5 py-1 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                    BYE ADVANCE
+                  </span>
+                </div>
+                <p className="mt-2 text-xs text-slate-400">
+                  This participant received an automatic BYE due to odd round numbers and advances directly to the Main Winner path without combat.
+                </p>
+              </div>
+            ) : (
+              match.participants.map((p, idx) => {
+                const isWinner = isCompleted && p.teamId === match.winnerTeamId;
+                return (
+                  <div
+                    key={p.id}
+                    className={`p-3.5 rounded-xl border transition-all ${
+                      isWinner
+                        ? 'bg-emerald-950/30 border-emerald-500/50 shadow-md shadow-emerald-500/10'
+                        : isCompleted
+                        ? 'bg-slate-900/40 border-white/5 opacity-75'
+                        : 'bg-slate-900/80 border-white/10'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs ${
+                          isWinner ? 'bg-emerald-500 text-black' : 'bg-slate-800 text-slate-400'
+                        }`}>
+                          {idx + 1}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-white text-sm">
+                              {p.team?.name || p.placeholderText || 'TBD Competitor'}
+                            </span>
+                            {isWinner && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500 text-black">
+                                WINNER
+                              </span>
+                            )}
+                          </div>
+                          {p.team?.robotName && (
+                            <p className="text-xs text-slate-400">
+                              Robot: <span className="text-slate-300 font-medium">{p.team.robotName}</span>
+                              {p.team.organization && <span className="ml-1 text-slate-500">({p.team.organization})</span>}
+                            </p>
+                          )}
+                          {p.advancementSource && (
+                            <span className="text-[10px] text-slate-500 block mt-0.5">
+                              Source: {p.advancementSource.replace(/_/g, ' ')}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {p.score !== null && p.score !== undefined && (
+                        <div className="text-right">
+                          <span className="text-lg font-mono font-bold text-white">{p.score}</span>
+                          <span className="block text-[10px] text-slate-500">PTS</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Tournament Journey & Next Destination */}
+          <div className="p-4 rounded-xl bg-slate-900/50 border border-white/10 space-y-2 text-xs">
+            <h4 className="font-semibold text-slate-300 flex items-center gap-1.5">
+              <ArrowRight className="w-3.5 h-3.5 text-sky-400" />
+              <span>Tournament Path Progression</span>
+            </h4>
+            
+            {match.stageType === 'ROUND_1' && (
+              <div className="space-y-1 text-slate-400">
+                <p className="flex items-center gap-1.5 text-emerald-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  <span><strong>Winner:</strong> Advances to Quarterfinals (Winners Bracket 2v2).</span>
+                </p>
+                <p className="flex items-center gap-1.5 text-amber-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  <span><strong>Loser:</strong> Drops into Round 1 Wildcard (3-way / 2-way battles).</span>
+                </p>
+              </div>
+            )}
+
+            {match.stageType === 'WILDCARD' && (
+              <p className="text-amber-300/90">
+                <strong>Round 1 Wildcard:</strong> 3-way (or 2-way) survival match. 1 winner advances to QF Wildcard. Losers are permanently eliminated.
+              </p>
+            )}
+
+            {match.stageType === 'QUARTERFINAL' && (
+              <div className="space-y-1 text-slate-400">
+                <p className="flex items-center gap-1.5 text-emerald-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  <span><strong>Winner:</strong> Advances to Semifinals (Winners Bracket 2v2).</span>
+                </p>
+                <p className="flex items-center gap-1.5 text-amber-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  <span><strong>Loser:</strong> Drops to Quarterfinal Wildcard.</span>
+                </p>
+              </div>
+            )}
+
+            {match.stageType === 'QUARTERFINAL_WILDCARD' && (
+              <p className="text-amber-300/90">
+                <strong>QF Wildcard:</strong> 3-way / 2-way match between WC R1 winners and QF losers. 1 winner advances to SF Wildcard. Losers are permanently eliminated.
+              </p>
+            )}
+
+            {match.stageType === 'SEMIFINAL' && (
+              <div className="space-y-1 text-slate-400">
+                <p className="flex items-center gap-1.5 text-emerald-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  <span><strong>Winner:</strong> Advances to Winners Final (Upper Championship).</span>
+                </p>
+                <p className="flex items-center gap-1.5 text-amber-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  <span><strong>Loser:</strong> Drops to Semifinal Wildcard for a second chance lifeline.</span>
+                </p>
+              </div>
+            )}
+
+            {match.stageType === 'SEMIFINAL_WILDCARD' && (
+              <p className="text-amber-300/90">
+                <strong>Semifinals Wildcard:</strong> 3-way / 2-way battles between QF WC winners and SF losers. 1 winner advances to Wildcard Final. Losers are permanently eliminated.
+              </p>
+            )}
+
+            {match.stageType === 'WINNERS_FINAL' && (
+              <div className="space-y-1 text-slate-400">
+                <p className="flex items-center gap-1.5 text-emerald-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  <span><strong>Winner:</strong> Crowned Winners Bracket Champion (Upper Winner) & advances to Grand Finals!</span>
+                </p>
+                <p className="flex items-center gap-1.5 text-amber-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  <span><strong>Loser:</strong> Drops to Wildcard Final for one last shot at the crown!</span>
+                </p>
+              </div>
+            )}
+
+            {match.stageType === 'WILDCARD_SEMIFINAL' && (
+              <p className="text-amber-300/90">
+                <strong>Wildcard Semifinals:</strong> Surviving contenders battle! Winners advance to the Wildcard Final Decider. Losers are permanently eliminated.
+              </p>
+            )}
+
+            {match.stageType === 'WILDCARD_FINAL' && (
+              <p className="text-amber-300/90">
+                <strong>Wildcard Final Decider:</strong> The final showdown for the Wildcard title! Winner is crowned Wildcard Champion & advances to Grand Finals. Loser is eliminated.
+              </p>
+            )}
+
+            {match.stageType === 'FINAL' && (
+              <p className="text-amber-400 font-semibold">
+                <strong>Grand Finals:</strong> Head-to-head 2v2 title match between the Upper Winner (Winner Matches Winner) and the Wildcard Winner (Loser Battles Winner) to crown the Tournament Champion!
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Modal Footer */}
+        <div className="px-6 py-3.5 bg-slate-900/80 border-t border-white/10 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-white transition-colors"
+          >
+            Close Details
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
