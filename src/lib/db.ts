@@ -3,20 +3,85 @@ import path from 'path';
 import fs from 'fs';
 import bcrypt from 'bcryptjs';
 
-const dbDirectory = path.join(process.cwd(), 'data');
-if (!fs.existsSync(dbDirectory)) {
-  fs.mkdirSync(dbDirectory, { recursive: true });
+function getDatabaseInstance(): Database.Database {
+  // Detect if running in serverless / read-only environment like Vercel or AWS Lambda
+  const isServerless = Boolean(
+    process.env.VERCEL ||
+    process.env.VERCEL_ENV ||
+    process.env.AWS_LAMBDA_FUNCTION_NAME ||
+    process.env.NOW_REGION
+  );
+
+  const localDir = path.join(process.cwd(), 'data');
+  const localDbPath = path.join(localDir, 'robot_games.db');
+
+  let useTmp = isServerless;
+
+  // If not explicitly serverless, test whether localDir is writable
+  if (!useTmp) {
+    try {
+      if (!fs.existsSync(localDir)) {
+        fs.mkdirSync(localDir, { recursive: true });
+      }
+      const testFile = path.join(localDir, `.write_test_${Date.now()}`);
+      fs.writeFileSync(testFile, 'ok');
+      fs.unlinkSync(testFile);
+    } catch {
+      useTmp = true;
+    }
+  }
+
+  let dbPath = localDbPath;
+
+  if (useTmp) {
+    // /tmp is the ONLY writable directory on Vercel / AWS Lambda
+    const tmpDbPath = path.join('/tmp', 'robot_games.db');
+    try {
+      if (!fs.existsSync(tmpDbPath) && fs.existsSync(localDbPath)) {
+        fs.copyFileSync(localDbPath, tmpDbPath);
+        if (fs.existsSync(localDbPath + '-wal')) {
+          try { fs.copyFileSync(localDbPath + '-wal', tmpDbPath + '-wal'); } catch {}
+        }
+        if (fs.existsSync(localDbPath + '-shm')) {
+          try { fs.copyFileSync(localDbPath + '-shm', tmpDbPath + '-shm'); } catch {}
+        }
+      }
+    } catch (copyErr) {
+      console.warn('[DB] Could not copy bundled DB to /tmp, will initialize new DB:', copyErr);
+    }
+    dbPath = tmpDbPath;
+  }
+
+  let dbInstance: Database.Database;
+  try {
+    dbInstance = new Database(dbPath);
+  } catch (openErr) {
+    console.warn(`[DB] Failed to open ${dbPath}, falling back to /tmp fallback:`, openErr);
+    const fallbackPath = path.join('/tmp', `robot_games_${Date.now()}.db`);
+    dbInstance = new Database(fallbackPath);
+  }
+
+  // Set pragmas safely
+  try {
+    dbInstance.pragma('journal_mode = WAL');
+  } catch {
+    try {
+      dbInstance.pragma('journal_mode = DELETE');
+    } catch {}
+  }
+
+  try {
+    dbInstance.pragma('foreign_keys = ON');
+  } catch {}
+
+  return dbInstance;
 }
 
-const dbPath = path.join(dbDirectory, 'robot_games.db');
-const db = new Database(dbPath);
-
-// Enable WAL mode for high concurrency and performance
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+const db = getDatabaseInstance();
 
 export function initDatabase() {
-  db.exec(`
+  try {
+    db.exec(`
     CREATE TABLE IF NOT EXISTS categories (
       id TEXT PRIMARY KEY,
       name TEXT UNIQUE NOT NULL,
@@ -250,6 +315,9 @@ export function initDatabase() {
       INSERT INTO admin_users (id, username, password_hash, created_at)
       VALUES (?, ?, ?, ?)
     `).run('admin-default', 'admin', hash, new Date().toISOString());
+  }
+  } catch (err) {
+    console.warn('[DB Init Warning]:', err);
   }
 }
 

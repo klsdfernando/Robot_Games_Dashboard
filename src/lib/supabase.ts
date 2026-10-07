@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import ws from 'ws';
+import { Team, RaceScheduleSlot } from '@/lib/types';
 
 // Environment variables
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -228,10 +229,20 @@ export async function clearRaceTeamsFromSupabase(division?: 'ALL' | 'SCHOOL' | '
     const uniCatId = 'c0000000-0000-0000-0000-000000000004';
 
     if (division === 'SCHOOL') {
+      const { data: sTeams } = await client.from('teams').select('id').or(`category_id.eq.${schoolCatId},race_category.eq.SCHOOL`);
+      const teamIds = (sTeams || []).map(t => t.id);
+      if (teamIds.length > 0) {
+        await client.from('race_schedule').delete().in('team_id', teamIds);
+      }
       await client.from('race_schedule').delete().eq('category_division', 'SCHOOL');
       await client.from('teams').delete().eq('category_id', schoolCatId);
       await client.from('teams').delete().eq('race_category', 'SCHOOL');
     } else if (division === 'UNIVERSITY') {
+      const { data: uTeams } = await client.from('teams').select('id').or(`category_id.eq.${uniCatId},race_category.eq.UNIVERSITY`);
+      const teamIds = (uTeams || []).map(t => t.id);
+      if (teamIds.length > 0) {
+        await client.from('race_schedule').delete().in('team_id', teamIds);
+      }
       await client.from('race_schedule').delete().eq('category_division', 'UNIVERSITY');
       await client.from('teams').delete().eq('category_id', uniCatId);
       await client.from('teams').delete().eq('race_category', 'UNIVERSITY');
@@ -314,3 +325,96 @@ export async function deleteRaceSlotFromSupabase(slotId: string): Promise<{ succ
     return { success: false, error: err.message };
   }
 }
+
+/**
+ * Fetches race teams from Supabase cloud database.
+ */
+export async function fetchRaceTeamsFromSupabase(division?: 'ALL' | 'SCHOOL' | 'UNIVERSITY'): Promise<Team[]> {
+  const client = getSupabaseAdminClient();
+  if (!client) return [];
+
+  const schoolCatId = 'c0000000-0000-0000-0000-000000000003';
+  const uniCatId = 'c0000000-0000-0000-0000-000000000004';
+
+  try {
+    let query = client.from('teams').select('*');
+
+    if (division === 'SCHOOL') {
+      query = query.or(`category_id.eq.${schoolCatId},race_category.eq.SCHOOL`);
+    } else if (division === 'UNIVERSITY') {
+      query = query.or(`category_id.eq.${uniCatId},race_category.eq.UNIVERSITY`);
+    } else {
+      query = query.or(`category_id.eq.${schoolCatId},category_id.eq.${uniCatId},race_category.eq.SCHOOL,race_category.eq.UNIVERSITY`);
+    }
+
+    const { data, error } = await query.order('name', { ascending: true });
+    if (error) {
+      console.warn('[Supabase fetchRaceTeams error]:', error.message);
+      return [];
+    }
+
+    return (data || []).map((r: any) => ({
+      id: r.id,
+      categoryId: r.category_id === uniCatId ? 'cat-race-university' : 'cat-race-school',
+      name: r.name,
+      robotName: r.robot_name || undefined,
+      organization: r.organization || undefined,
+      seed: r.seed ?? undefined,
+      status: r.status || 'ACTIVE',
+      lives: r.lives ?? 2,
+      isWithdrawn: Boolean(r.is_withdrawn),
+      logoUrl: r.logo_url || undefined,
+      raceCategory: (r.race_category === 'UNIVERSITY' || r.category_id === uniCatId) ? 'UNIVERSITY' : 'SCHOOL',
+      notes: r.notes || undefined,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    }));
+  } catch (err: any) {
+    console.warn('[Supabase fetchRaceTeams exception]:', err.message);
+    return [];
+  }
+}
+
+/**
+ * Fetches race schedule slots from Supabase cloud database.
+ */
+export async function fetchRaceScheduleFromSupabase(division?: 'ALL' | 'SCHOOL' | 'UNIVERSITY'): Promise<RaceScheduleSlot[]> {
+  const client = getSupabaseAdminClient();
+  if (!client) return [];
+
+  try {
+    let query = client.from('race_schedule').select('*');
+    if (division && division !== 'ALL') {
+      query = query.eq('category_division', division);
+    }
+
+    const { data, error } = await query.order('slot_number', { ascending: true });
+    if (error) {
+      console.warn('[Supabase fetchRaceSchedule error]:', error.message);
+      return [];
+    }
+
+    return (data || []).map((r: any) => ({
+      id: r.id,
+      teamId: r.team_id || undefined,
+      teamName: r.team_name,
+      robotName: r.robot_name || undefined,
+      organization: r.organization || undefined,
+      logoUrl: r.logo_url || undefined,
+      categoryDivision: (r.category_division === 'UNIVERSITY' ? 'UNIVERSITY' : 'SCHOOL'),
+      slotNumber: r.slot_number,
+      scheduledTime: r.scheduled_time || '09:30 AM',
+      status: r.status || 'SCHEDULED',
+      track: r.track || 'Track 1',
+      timeRecorded: r.time_recorded || undefined,
+      score: r.score !== null && r.score !== undefined ? Number(r.score) : undefined,
+      notes: r.notes || undefined,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    }));
+  } catch (err: any) {
+    console.warn('[Supabase fetchRaceSchedule exception]:', err.message);
+    return [];
+  }
+}
+

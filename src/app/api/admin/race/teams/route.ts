@@ -1,15 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth';
-import { getRaceTeams, createRaceTeam } from '@/lib/repository';
+import { getRaceTeams, createRaceTeam, clearAllRaceTeams } from '@/lib/repository';
 import { resolveDriveLogoUrl } from '@/lib/logo-downloader';
-import { syncTeamToSupabase } from '@/lib/supabase';
+import { isSupabaseConfigured, syncTeamToSupabase, fetchRaceTeamsFromSupabase, clearRaceTeamsFromSupabase } from '@/lib/supabase';
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const division = searchParams.get('division') as 'ALL' | 'SCHOOL' | 'UNIVERSITY' | null;
 
-    const allTeams = getRaceTeams('ALL');
+    let allTeams: any[] = [];
+
+    // Prioritize Supabase cloud database if configured
+    if (isSupabaseConfigured()) {
+      try {
+        const cloudTeams = await fetchRaceTeamsFromSupabase('ALL');
+        if (cloudTeams && Array.isArray(cloudTeams)) {
+          allTeams = cloudTeams;
+        }
+      } catch (err) {
+        console.warn('[Supabase Fetch Teams Warning]:', err);
+      }
+    }
+
+    // Fall back to local SQLite if Supabase not configured or returned nothing
+    if (allTeams.length === 0) {
+      try {
+        allTeams = getRaceTeams('ALL');
+      } catch (e) {
+        console.warn('[Local SQLite Fetch Warning]:', e);
+      }
+    }
+
     const schoolTeams = allTeams.filter(t => t.raceCategory === 'SCHOOL');
     const universityTeams = allTeams.filter(t => t.raceCategory === 'UNIVERSITY');
 
@@ -55,19 +77,39 @@ export async function POST(req: NextRequest) {
       resolvedLogoUrl = resolveDriveLogoUrl(rawUrl) || rawUrl;
     }
 
-    const team = createRaceTeam({
-      name: name.trim(),
-      categoryDivision: division,
-      robotName: robotName?.trim() || undefined,
-      organization: organization?.trim() || undefined,
-      logoUrl: resolvedLogoUrl,
-      notes: notes?.trim() || undefined
-    });
+    let team: any;
+    try {
+      team = createRaceTeam({
+        name: name.trim(),
+        categoryDivision: division,
+        robotName: robotName?.trim() || undefined,
+        organization: organization?.trim() || undefined,
+        logoUrl: resolvedLogoUrl,
+        notes: notes?.trim() || undefined
+      });
+    } catch (dbErr) {
+      console.warn('[Local SQLite Insert Warning]:', dbErr);
+      team = {
+        id: `team-${crypto.randomUUID()}`,
+        categoryId: division === 'UNIVERSITY' ? 'cat-race-university' : 'cat-race-school',
+        name: name.trim(),
+        robotName: robotName?.trim() || undefined,
+        organization: organization?.trim() || undefined,
+        status: 'ACTIVE',
+        lives: 2,
+        isWithdrawn: false,
+        logoUrl: resolvedLogoUrl,
+        raceCategory: division,
+        notes: notes?.trim() || undefined,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+    }
 
-    // Automatically sync team to Supabase if configured
-    syncTeamToSupabase(team).catch(err => {
-      console.warn('[Supabase Sync Warning]:', err);
-    });
+    // Automatically sync team to Supabase cloud if configured
+    if (isSupabaseConfigured()) {
+      await syncTeamToSupabase(team);
+    }
 
     return NextResponse.json({
       success: true,
@@ -89,18 +131,23 @@ export async function DELETE(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const division = (searchParams.get('division') || 'ALL') as 'ALL' | 'SCHOOL' | 'UNIVERSITY';
 
-    const { clearAllRaceTeams } = await import('@/lib/repository');
-    const { clearRaceTeamsFromSupabase } = await import('@/lib/supabase');
+    // Clear from Supabase first if configured
+    if (isSupabaseConfigured()) {
+      await clearRaceTeamsFromSupabase(division);
+    }
 
-    const result = clearAllRaceTeams(division);
-    clearRaceTeamsFromSupabase(division).catch(err => {
-      console.warn('[Supabase Clear Warning]:', err);
-    });
+    let deletedCount = 0;
+    try {
+      const result = clearAllRaceTeams(division);
+      deletedCount = result.count;
+    } catch (dbErr) {
+      console.warn('[Local SQLite Clear Warning]:', dbErr);
+    }
 
     return NextResponse.json({
       success: true,
-      message: `Cleared ${result.count} race teams from ${division === 'ALL' ? 'all divisions' : division + ' division'}.`,
-      deletedCount: result.count
+      message: `Cleared race teams from ${division === 'ALL' ? 'all divisions' : division + ' division'}.`,
+      deletedCount
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Failed to clear race teams' }, { status: 500 });

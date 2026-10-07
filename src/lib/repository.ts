@@ -1904,8 +1904,24 @@ export function deleteRaceTeam(id: string): boolean {
 export function clearAllRaceTeams(division: 'ALL' | 'SCHOOL' | 'UNIVERSITY' = 'ALL'): { count: number } {
   const teamsToDelete = getRaceTeams(division);
   for (const t of teamsToDelete) {
-    db.prepare('DELETE FROM race_schedule WHERE team_id = ? OR team_name = ?').run(t.id, t.name);
-    db.prepare('DELETE FROM teams WHERE id = ?').run(t.id);
+    try {
+      db.prepare('DELETE FROM race_schedule WHERE team_id = ? OR team_name = ?').run(t.id, t.name);
+      db.prepare('DELETE FROM teams WHERE id = ?').run(t.id);
+    } catch {}
+  }
+  try {
+    if (division === 'SCHOOL') {
+      db.prepare("DELETE FROM race_schedule WHERE category_division = 'SCHOOL'").run();
+      db.prepare("DELETE FROM teams WHERE category_id = 'cat-race-school' OR race_category = 'SCHOOL'").run();
+    } else if (division === 'UNIVERSITY') {
+      db.prepare("DELETE FROM race_schedule WHERE category_division = 'UNIVERSITY'").run();
+      db.prepare("DELETE FROM teams WHERE category_id = 'cat-race-university' OR race_category = 'UNIVERSITY'").run();
+    } else {
+      db.prepare("DELETE FROM race_schedule").run();
+      db.prepare("DELETE FROM teams WHERE category_id IN ('cat-race', 'cat-race-school', 'cat-race-university')").run();
+    }
+  } catch (e) {
+    console.warn('[clearAllRaceTeams SQLite warning]:', e);
   }
   return { count: teamsToDelete.length };
 }
