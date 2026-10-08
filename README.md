@@ -31,7 +31,7 @@ ROUND 1 (1v1 battles + odd-count BYE)
 ## 🚀 Key Features
 
 ### 1. Dual Independent Categories
-- **Heavyweight Division (30kg)** & **Lightweight Division (15kg)**
+- **Heavyweight Division (20kg)** & **Lightweight Division (3kg)**
 - Completely isolated rosters, matches, wildcard groups, brackets, and champions.
 - Instant, seamless public division switcher `[ HEAVYWEIGHT ]` `[ LIGHTWEIGHT ]`.
 
@@ -53,11 +53,11 @@ ROUND 1 (1v1 battles + odd-count BYE)
   - **Mobile Responsive**: Stage-based tab selector (`Round 1`, `Wildcard`, `Re-entry`, `Quarter`, `Semi`, `Final`) with touch-friendly navigation buttons and zero horizontal overflow.
   - **Interactive Match Modal**: Tap any match to view combatant details, scores, lineage (previous matches), and next stage destinations.
 - **Match Schedule & Logs (`/matches`)**: Filterable by `Live Now`, `Up Next`, `Upcoming`, and `Completed`.
-- **Competitor Roster (`/teams`)**: Full team listing with robot names, organizations, and real-time status badges (`ACTIVE`, `WILDCARD`, `FINALIST`, `CHAMPION`, `ELIMINATED`).
+- **Competitor Roster (`/teams`)**: Full team listing with organizations and real-time status badges (`ACTIVE`, `WILDCARD`, `FINALIST`, `CHAMPION`, `ELIMINATED`).
 - **Celebration Screen**: Grand finals champion announcement with celebratory particle effect.
 
-### 4. Organizer Admin Console (`/admin`)
-- Protected authentication with session JWT cookies (`/admin/login`).
+### 4. Organizer Admin Console
+- Unlinked private route protected by a bcrypt-backed event passkey and session JWT cookie.
 - **Team Management**: Add, edit, delete (with cascade protection), and withdraw toggle.
 - **Round 1 Generation**: Interactive preview of proposed pairings and manual BYE override before database persistence.
 - **Wildcard Console**: Review pool of Round 1 losers, verify calculated groups, and confirm generation.
@@ -92,7 +92,7 @@ ROUND 1 (1v1 battles + odd-count BYE)
 │   │   │   ├── admin/           # Protected admin APIs (teams, matches, stages, wildcard)
 │   │   │   ├── auth/            # Admin login, logout, session check
 │   │   │   └── public/          # Public read-only endpoints (tournament-state, match details)
-│   │   ├── admin/               # Organizer administration console
+│   │   ├── control-7v9k2m4q/   # Private organizer administration console
 │   │   │   ├── bracket/         # Round 1 generator & progression
 │   │   │   ├── matches/         # Live arena match control & winner correction
 │   │   │   ├── teams/           # Team registration and withdrawal
@@ -148,11 +148,9 @@ Open **[http://localhost:3001](http://localhost:3001)** in your browser.
 
 ---
 
-## 🔐 Admin Credentials
+## 🔐 Organizer Access
 
-- **URL**: `/admin/login`
-- **Username**: `admin`
-- **Password**: `admin123`
+Configure `ADMIN_PASSKEY_HASH` and `ADMIN_JWT_SECRET` in `.env.local`. The private route and passkey should be shared with authorized event staff only and must not be committed to source control.
 
 ---
 

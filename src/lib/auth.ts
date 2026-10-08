@@ -1,6 +1,5 @@
 import { SignJWT, jwtVerify } from 'jose';
 import bcrypt from 'bcryptjs';
-import db from './db';
 import { cookies } from 'next/headers';
 
 const JWT_SECRET = new TextEncoder().encode(
@@ -9,10 +8,9 @@ const JWT_SECRET = new TextEncoder().encode(
 
 const COOKIE_NAME = 'rg_admin_session';
 
-export async function verifyAdminPassword(password: string): Promise<boolean> {
-  const admin = db.prepare('SELECT * FROM admin_users WHERE username = ?').get('admin') as any;
-  if (!admin) return false;
-  return bcrypt.compare(password, admin.password_hash);
+export async function verifyAdminPasskey(passkey: string): Promise<boolean> {
+  const configuredHash = process.env.ADMIN_PASSKEY_HASH;
+  return configuredHash ? bcrypt.compare(passkey, configuredHash) : false;
 }
 
 export async function createAdminToken(username: string): Promise<string> {

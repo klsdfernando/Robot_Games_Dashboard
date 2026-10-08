@@ -112,7 +112,7 @@ export default function AdminSettingsPage() {
       {/* Header */}
       <div className="pb-4 border-b border-white/10">
         <div className="flex items-center gap-2">
-          <Settings className="w-5 h-5 text-amber-400" />
+          <Settings className="w-5 h-5 text-blue-400" />
           <h1 className="text-xl font-bold text-white">
             Tournament Settings & Rules ({selectedCategory})
           </h1>
@@ -123,14 +123,14 @@ export default function AdminSettingsPage() {
       </div>
 
       {error && (
-        <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center justify-between">
+        <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs flex items-center justify-between">
           <span>{error}</span>
           <button onClick={() => setError(null)} className="text-slate-400 hover:text-white">✕</button>
         </div>
       )}
 
       {success && (
-        <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center justify-between">
+        <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs flex items-center justify-between">
           <span>{success}</span>
           <button onClick={() => setSuccess(null)} className="text-slate-400 hover:text-white">✕</button>
         </div>
@@ -142,7 +142,7 @@ export default function AdminSettingsPage() {
           <div>
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <span>Wildcard Single Participant Rule</span>
-              <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">
+              <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 font-bold">
                 Special Case
               </span>
             </h3>
@@ -159,7 +159,7 @@ export default function AdminSettingsPage() {
                 value="MANUAL"
                 checked={wildcardRule === 'MANUAL'}
                 onChange={() => setWildcardRule('MANUAL')}
-                className="mt-0.5 accent-amber-400"
+                className="mt-0.5 accent-blue-400"
               />
               <div>
                 <span className="text-xs font-bold text-white block">
@@ -178,7 +178,7 @@ export default function AdminSettingsPage() {
                 value="ELIMINATE"
                 checked={wildcardRule === 'ELIMINATE'}
                 onChange={() => setWildcardRule('ELIMINATE')}
-                className="mt-0.5 accent-amber-400"
+                className="mt-0.5 accent-blue-400"
               />
               <div>
                 <span className="text-xs font-bold text-white block">
@@ -197,7 +197,7 @@ export default function AdminSettingsPage() {
                 value="AWARD_BYE"
                 checked={wildcardRule === 'AWARD_BYE'}
                 onChange={() => setWildcardRule('AWARD_BYE')}
-                className="mt-0.5 accent-amber-400"
+                className="mt-0.5 accent-blue-400"
               />
               <div>
                 <span className="text-xs font-bold text-white block">
@@ -220,7 +220,7 @@ export default function AdminSettingsPage() {
                 type="checkbox"
                 checked={allowManualPairings}
                 onChange={(e) => setAllowManualPairings(e.target.checked)}
-                className="accent-amber-400 w-4 h-4 rounded"
+                className="accent-blue-400 w-4 h-4 rounded"
               />
               <div>
                 <span className="text-xs font-bold text-white block">
@@ -237,7 +237,7 @@ export default function AdminSettingsPage() {
         <button
           type="submit"
           disabled={loading}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-500/20"
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-blue-500 hover:bg-blue-400 text-black shadow-lg shadow-blue-500/20"
         >
           <Save className="w-4 h-4" />
           <span>Save Configuration</span>
@@ -247,7 +247,7 @@ export default function AdminSettingsPage() {
       {/* Database & Management Actions */}
       <div className="p-6 rounded-3xl bg-slate-900/60 border border-white/10 space-y-4 pt-6">
         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-          <Database className="w-4 h-4 text-sky-400" />
+          <Database className="w-4 h-4 text-blue-400" />
           <span>Database & Maintenance</span>
         </h3>
 
@@ -257,16 +257,16 @@ export default function AdminSettingsPage() {
             disabled={loading}
             className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10"
           >
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <Sparkles className="w-3.5 h-3.5 text-blue-400" />
             <span>Seed Realistic Combat Teams</span>
           </button>
 
           <button
             onClick={handleReset}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-rose-950/40 hover:bg-rose-950/70 text-rose-300 border border-rose-500/30"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-blue-950/40 hover:bg-blue-950/70 text-blue-300 border border-blue-500/30"
           >
-            <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
+            <RotateCcw className="w-3.5 h-3.5 text-blue-400" />
             <span>Reset Division Tournament</span>
           </button>
         </div>

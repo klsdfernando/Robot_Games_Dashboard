@@ -25,7 +25,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  const isLoginPage = pathname === '/admin/login';
+  const isLoginPage = pathname === '/control-7v9k2m4q/login';
 
   useEffect(() => {
     if (isLoginPage) {
@@ -39,10 +39,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         if (res.ok) {
           setIsAuthenticated(true);
         } else {
-          router.push('/admin/login');
+          router.push('/control-7v9k2m4q/login');
         }
       } catch {
-        router.push('/admin/login');
+        router.push('/control-7v9k2m4q/login');
       } finally {
         setCheckingAuth(false);
       }
@@ -53,7 +53,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
-    router.push('/admin/login');
+    router.push('/control-7v9k2m4q/login');
     router.refresh();
   };
 
@@ -64,39 +64,39 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (checkingAuth) {
     return (
       <div className="py-24 text-center text-slate-400">
-        <RefreshCw className="w-8 h-8 mx-auto mb-3 animate-spin text-amber-400" />
+        <RefreshCw className="w-8 h-8 mx-auto mb-3 animate-spin text-blue-400" />
         <p className="text-xs font-semibold">Verifying organizer credentials...</p>
       </div>
     );
   }
 
   const adminNav = [
-    { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
-    { name: 'Teams', href: '/admin/teams', icon: Users },
-    { name: 'Bracket', href: '/admin/bracket', icon: Swords },
-    { name: 'Wildcard', href: '/admin/wildcard', icon: Flame },
-    { name: 'Matches', href: '/admin/matches', icon: Radio },
-    { name: 'Robot Race', href: '/admin/race', icon: Flag },
-    { name: 'Settings', href: '/admin/settings', icon: Settings },
+    { name: 'Dashboard', href: '/control-7v9k2m4q', icon: LayoutDashboard },
+    { name: 'Teams', href: '/control-7v9k2m4q/teams', icon: Users },
+    { name: 'Bracket', href: '/control-7v9k2m4q/bracket', icon: Swords },
+    { name: 'Wildcard', href: '/control-7v9k2m4q/wildcard', icon: Flame },
+    { name: 'Matches', href: '/control-7v9k2m4q/matches', icon: Radio },
+    { name: 'Robot Race', href: '/control-7v9k2m4q/race', icon: Flag },
+    { name: 'Settings', href: '/control-7v9k2m4q/settings', icon: Settings },
   ];
 
   return (
     <div className="space-y-6">
       {/* Top Admin Control Bar */}
-      <div className="p-4 rounded-2xl bg-amber-950/20 border border-amber-500/30 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+      <div className="p-4 rounded-2xl bg-blue-950/20 border border-blue-500/30 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-amber-500 text-black flex items-center justify-center font-bold">
+          <div className="w-9 h-9 rounded-xl bg-blue-500 text-black flex items-center justify-center font-bold">
             <Lock className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <span className="text-sm font-extrabold text-white">ORGANIZER CONTROL CONSOLE</span>
-              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-500/30 text-amber-300">
+              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-blue-500/30 text-blue-300">
                 ACTIVE
               </span>
             </div>
             <p className="text-[11px] text-slate-400">
-              Controlling: <strong className="text-amber-400">{selectedCategory}</strong> division
+              Controlling: <strong className="text-blue-400">{selectedCategory}</strong> division
             </p>
           </div>
         </div>
@@ -108,7 +108,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               onClick={() => setSelectedCategory('HEAVYWEIGHT')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                 selectedCategory === 'HEAVYWEIGHT'
-                  ? 'bg-sky-600 text-white shadow-md'
+                  ? 'bg-blue-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -118,7 +118,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               onClick={() => setSelectedCategory('LIGHTWEIGHT')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                 selectedCategory === 'LIGHTWEIGHT'
-                  ? 'bg-amber-600 text-white shadow-md'
+                  ? 'bg-blue-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -128,7 +128,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
           <button
             onClick={handleLogout}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-rose-950/50 hover:text-rose-400 text-slate-400 border border-white/10 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-blue-950/50 hover:text-blue-400 text-slate-400 border border-white/10 transition-colors"
             title="Log Out"
           >
             <LogOut className="w-3.5 h-3.5" />
@@ -149,7 +149,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               href={item.href}
               className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex-shrink-0 ${
                 isActive
-                  ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20'
+                  ? 'bg-blue-500 text-black shadow-md shadow-blue-500/20'
                   : 'bg-slate-900/80 text-slate-400 hover:text-white border border-white/5'
               }`}
             >

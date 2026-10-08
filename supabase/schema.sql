@@ -18,14 +18,15 @@ CREATE TABLE IF NOT EXISTS public.categories (
 -- Seed Categories (Combat & Race)
 INSERT INTO public.categories (id, name, display_name, description)
 VALUES 
-    ('c0000000-0000-0000-0000-000000000001', 'HEAVYWEIGHT', 'Heavyweight Division', '60kg combat robots with active kinetic weapons'),
-    ('c0000000-0000-0000-0000-000000000002', 'LIGHTWEIGHT', 'Lightweight Division', '15kg combat robots and autonomous rovers'),
+    ('c0000000-0000-0000-0000-000000000001', 'HEAVYWEIGHT', 'Heavyweight Division', '20kg combat robots with active kinetic weapons'),
+    ('c0000000-0000-0000-0000-000000000002', 'LIGHTWEIGHT', 'Lightweight Division', '3kg combat robots and autonomous rovers'),
     ('c0000000-0000-0000-0000-000000000003', 'RACE_SCHOOL', 'School Category', 'Robot Race tournament division for high school competitors'),
     ('c0000000-0000-0000-0000-000000000004', 'RACE_UNIVERSITY', 'University Category', 'Robot Race tournament division for collegiate / university competitors')
 ON CONFLICT (name) DO UPDATE 
 SET display_name = EXCLUDED.display_name, description = EXCLUDED.description;
 
 -- 2. TEAMS TABLE (Stores both Combat and Race teams)
+
 CREATE TABLE IF NOT EXISTS public.teams (
     id TEXT PRIMARY KEY,
     category_id UUID NOT NULL REFERENCES public.categories(id) ON DELETE CASCADE,

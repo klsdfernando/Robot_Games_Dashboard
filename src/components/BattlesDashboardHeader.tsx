@@ -11,17 +11,16 @@ import {
   Zap, 
   Shield, 
   Flame, 
-  RefreshCw, 
-  Lock 
+  RefreshCw
 } from 'lucide-react';
 
 export default function BattlesDashboardHeader() {
   const pathname = usePathname();
   const { selectedCategory, setSelectedCategory, overview, isPolling, refresh } = useTournament();
 
-  // Only render on Robot Battles pages, not on /race or /admin
+  // Only render on public Robot Battles pages.
   const isRace = pathname.startsWith('/race');
-  const isAdmin = pathname.startsWith('/admin');
+  const isAdmin = pathname.startsWith('/control-7v9k2m4q');
 
   if (isRace || isAdmin) {
     return null;
@@ -35,11 +34,11 @@ export default function BattlesDashboardHeader() {
   ];
 
   return (
-    <div className="mb-6 animate-in fade-in duration-150">
+    <div className="relative z-30 mb-6 animate-in fade-in duration-150 lg:sticky lg:top-[5.25rem]">
       {/* Robot Battles Sub-Dashboard Control Bar */}
-      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 p-3 rounded-2xl bg-[#0c121e]/90 border border-white/10 backdrop-blur-md shadow-xl">
+      <div className="flex flex-col items-stretch justify-between gap-2.5 rounded-2xl border border-white/[0.09] bg-[#0b1019]/90 p-2.5 shadow-[0_18px_50px_rgba(0,0,0,0.25)] backdrop-blur-2xl lg:flex-row lg:items-center">
         {/* Left: Battles Navigation Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0 scrollbar-none">
+        <nav aria-label="Battle dashboard" className="grid grid-cols-4 gap-1 sm:flex sm:items-center">
           {navTabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = pathname === tab.href;
@@ -47,77 +46,70 @@ export default function BattlesDashboardHeader() {
               <Link
                 key={tab.name}
                 href={tab.href}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
+                className={`flex min-h-10 min-w-0 items-center justify-center gap-1.5 rounded-xl px-1.5 py-2 text-[10px] font-bold transition-all min-[430px]:gap-2 min-[430px]:px-2.5 min-[430px]:text-xs sm:shrink-0 sm:px-3.5 ${
                   isActive
-                    ? 'bg-sky-500/20 text-sky-400 border border-sky-500/40 shadow-sm shadow-sky-500/10'
+                    ? 'border border-blue-400/30 bg-blue-400/12 text-blue-300 shadow-sm shadow-blue-500/10'
                     : 'text-slate-400 hover:text-white hover:bg-white/5'
                 }`}
+                aria-current={isActive ? 'page' : undefined}
               >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{tab.name}</span>
+                <Icon className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{tab.name}</span>
               </Link>
             );
           })}
-        </div>
+        </nav>
 
         {/* Center / Right: Division Switcher (HEAVYWEIGHT vs LIGHTWEIGHT) & Actions */}
-        <div className="flex flex-wrap items-center justify-between lg:justify-end gap-2.5">
+        <div className="grid grid-cols-[1fr_auto] items-center gap-2 border-t border-white/[0.07] pt-2.5 lg:flex lg:justify-end lg:border-0 lg:pt-0">
           {/* Live Indicator (if arena match active) */}
           {overview?.liveMatch && (
-            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold">
-              <span className="w-2 h-2 rounded-full bg-rose-500 animate-live-pulse" />
+            <div className="flex min-h-10 items-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/10 px-3 py-1.5 text-[11px] font-bold text-blue-400 lg:min-h-0 lg:text-xs">
+              <span className="w-2 h-2 rounded-full bg-blue-500 animate-live-pulse" />
               <span>LIVE MATCH</span>
             </div>
           )}
 
           {/* Weight Division Switcher */}
-          <div className="flex items-center bg-slate-900/90 p-1 rounded-xl border border-white/10 shadow-inner">
+          <div className="order-3 col-span-2 grid w-full grid-cols-2 items-center rounded-xl border border-white/[0.08] bg-black/20 p-1 shadow-inner lg:order-none lg:flex lg:w-auto">
             <button
               onClick={() => setSelectedCategory('HEAVYWEIGHT')}
-              className={`px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`flex min-h-10 min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 text-[10px] font-bold transition-all min-[390px]:text-[11px] sm:flex-none sm:px-3.5 sm:text-xs ${
                 selectedCategory === 'HEAVYWEIGHT'
-                  ? 'bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-md shadow-sky-500/25'
+                  ? 'bg-blue-400 text-slate-950 shadow-md shadow-blue-500/20'
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
             >
               <Shield className="w-3.5 h-3.5" />
               <span>HEAVYWEIGHT</span>
-              <span className="text-[10px] opacity-75 font-mono hidden sm:inline">30kg</span>
+              <span className="hidden font-mono text-[10px] opacity-75 min-[430px]:inline">20kg</span>
             </button>
             <button
               onClick={() => setSelectedCategory('LIGHTWEIGHT')}
-              className={`px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`flex min-h-10 min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 text-[10px] font-bold transition-all min-[390px]:text-[11px] sm:flex-none sm:px-3.5 sm:text-xs ${
                 selectedCategory === 'LIGHTWEIGHT'
-                  ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-md shadow-amber-500/25'
+                  ? 'bg-blue-400 text-slate-950 shadow-md shadow-blue-500/20'
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
             >
               <Flame className="w-3.5 h-3.5" />
               <span>LIGHTWEIGHT</span>
-              <span className="text-[10px] opacity-75 font-mono hidden sm:inline">15kg</span>
+              <span className="hidden font-mono text-[10px] opacity-75 min-[430px]:inline">3kg</span>
             </button>
           </div>
 
           {/* Quick Utility Tools */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center justify-end gap-1.5">
             {/* Live DB Refresh */}
             <button
               onClick={() => refresh()}
               title="Refresh Battles State"
-              className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-white/5 border border-white/5 transition-colors"
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
+              aria-label="Refresh battles state"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isPolling ? 'animate-spin text-sky-400' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${isPolling ? 'animate-spin text-blue-400' : ''}`} />
             </button>
 
-            {/* Organizer Admin Portal */}
-            <Link
-              href="/admin"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-amber-400 hover:bg-amber-400/10 border border-slate-700/60 hover:border-amber-400/30 transition-all"
-              title="Organizer Admin Portal"
-            >
-              <Lock className="w-3 h-3 text-amber-400" />
-              <span>Admin</span>
-            </Link>
           </div>
         </div>
       </div>

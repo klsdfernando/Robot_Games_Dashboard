@@ -104,8 +104,8 @@ export default function AdminDashboardPage() {
       {msg && (
         <div className={`p-4 rounded-xl text-xs font-semibold flex items-center justify-between ${
           msg.type === 'success'
-            ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
-            : 'bg-rose-500/10 border border-rose-500/30 text-rose-400'
+            ? 'bg-blue-500/10 border border-blue-500/30 text-blue-400'
+            : 'bg-blue-500/10 border border-blue-500/30 text-blue-400'
         }`}>
           <span>{msg.text}</span>
           <button onClick={() => setMsg(null)} className="text-slate-400 hover:text-white">✕</button>
@@ -115,7 +115,7 @@ export default function AdminDashboardPage() {
       {/* Stage Status Hero Card */}
       <div className="p-6 rounded-3xl bg-slate-900 border border-white/10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
         <div>
-          <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-400 block">
+          <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-400 block">
             {selectedCategory} Division Status
           </span>
           <h2 className="text-2xl font-black text-white mt-1">
@@ -131,8 +131,8 @@ export default function AdminDashboardPage() {
         <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
           {matches.length === 0 ? (
             <Link
-              href="/admin/bracket"
-              className="flex-1 md:flex-initial px-4 py-2.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-black flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20"
+              href="/control-7v9k2m4q/bracket"
+              className="flex-1 md:flex-initial px-4 py-2.5 rounded-xl text-xs font-bold bg-blue-500 hover:bg-blue-400 text-black flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20"
             >
               <Play className="w-3.5 h-3.5" />
               <span>Generate Round 1</span>
@@ -140,8 +140,8 @@ export default function AdminDashboardPage() {
           ) : (
             <>
               <Link
-                href="/admin/matches"
-                className="flex-1 md:flex-initial px-4 py-2.5 rounded-xl text-xs font-bold bg-sky-500 hover:bg-sky-400 text-black flex items-center justify-center gap-2"
+                href="/control-7v9k2m4q/matches"
+                className="flex-1 md:flex-initial px-4 py-2.5 rounded-xl text-xs font-bold bg-blue-500 hover:bg-blue-400 text-black flex items-center justify-center gap-2"
               >
                 <Radio className="w-3.5 h-3.5" />
                 <span>Match Console</span>
@@ -165,50 +165,50 @@ export default function AdminDashboardPage() {
       {/* Quick Action Control Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Link
-          href="/admin/teams"
-          className="p-5 rounded-2xl bg-slate-900/60 border border-white/10 hover:border-amber-400/30 transition-all group"
+          href="/control-7v9k2m4q/teams"
+          className="p-5 rounded-2xl bg-slate-900/60 border border-white/10 hover:border-blue-400/30 transition-all group"
         >
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-slate-400">Teams Registered</span>
-            <Users className="w-4 h-4 text-amber-400" />
+            <Users className="w-4 h-4 text-blue-400" />
           </div>
           <span className="text-2xl font-black text-white">{teams.length}</span>
           <span className="text-[11px] text-slate-500 block mt-1">Manage Rosters →</span>
         </Link>
 
         <Link
-          href="/admin/matches"
-          className="p-5 rounded-2xl bg-slate-900/60 border border-white/10 hover:border-amber-400/30 transition-all group"
+          href="/control-7v9k2m4q/matches"
+          className="p-5 rounded-2xl bg-slate-900/60 border border-white/10 hover:border-blue-400/30 transition-all group"
         >
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-slate-400">Total Matches</span>
-            <Swords className="w-4 h-4 text-sky-400" />
+            <Swords className="w-4 h-4 text-blue-400" />
           </div>
           <span className="text-2xl font-black text-white">{matches.length}</span>
           <span className="text-[11px] text-slate-500 block mt-1">Declare Winners →</span>
         </Link>
 
         <Link
-          href="/admin/wildcard"
-          className="p-5 rounded-2xl bg-slate-900/60 border border-white/10 hover:border-amber-400/30 transition-all group"
+          href="/control-7v9k2m4q/wildcard"
+          className="p-5 rounded-2xl bg-slate-900/60 border border-white/10 hover:border-blue-400/30 transition-all group"
         >
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-slate-400">Wildcard Pool</span>
-            <Flame className="w-4 h-4 text-orange-400" />
+            <Flame className="w-4 h-4 text-blue-400" />
           </div>
-          <span className="text-2xl font-black text-amber-400">
+          <span className="text-2xl font-black text-blue-400">
             {teams.filter(t => t.status === 'WILDCARD').length}
           </span>
           <span className="text-[11px] text-slate-500 block mt-1">Group Generator →</span>
         </Link>
 
         <Link
-          href="/admin/bracket"
-          className="p-5 rounded-2xl bg-slate-900/60 border border-white/10 hover:border-amber-400/30 transition-all group"
+          href="/control-7v9k2m4q/bracket"
+          className="p-5 rounded-2xl bg-slate-900/60 border border-white/10 hover:border-blue-400/30 transition-all group"
         >
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-slate-400">Stages Configured</span>
-            <Layers className="w-4 h-4 text-purple-400" />
+            <Layers className="w-4 h-4 text-blue-400" />
           </div>
           <span className="text-2xl font-black text-white">{stages.length}</span>
           <span className="text-[11px] text-slate-500 block mt-1">Bracket Architecture →</span>
@@ -227,16 +227,16 @@ export default function AdminDashboardPage() {
             disabled={loading}
             className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 transition-colors"
           >
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <Sparkles className="w-3.5 h-3.5 text-blue-400" />
             <span>Seed Realistic Demo Teams ({selectedCategory})</span>
           </button>
 
           <button
             onClick={handleResetTournament}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-rose-950/40 hover:bg-rose-950/70 text-rose-300 border border-rose-500/30 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-blue-950/40 hover:bg-blue-950/70 text-blue-300 border border-blue-500/30 transition-colors"
           >
-            <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
+            <RotateCcw className="w-3.5 h-3.5 text-blue-400" />
             <span>Reset Division Tournament</span>
           </button>
         </div>

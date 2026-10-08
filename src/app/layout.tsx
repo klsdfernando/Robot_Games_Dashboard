@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { TournamentProvider } from '@/context/TournamentContext';
 import Navbar from '@/components/Navbar';
@@ -13,8 +14,20 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
+  themeColor: '#070a10',
 };
+
+const geistSans = Geist({
+  variable: '--font-geist-sans',
+  subsets: ['latin'],
+  display: 'swap',
+});
+
+const geistMono = Geist_Mono({
+  variable: '--font-geist-mono',
+  subsets: ['latin'],
+  display: 'swap',
+});
 
 export default function RootLayout({
   children,
@@ -22,15 +35,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body className="bg-[#090d16] text-slate-100 min-h-screen flex flex-col antialiased">
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} dark`}>
+      <body className="min-h-screen bg-[#070a10] text-slate-100 antialiased">
+        <a href="#main-content" className="skip-link">Skip to tournament content</a>
         <TournamentProvider>
-          <Navbar />
-          <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <BattlesDashboardHeader />
-            {children}
-          </main>
-          <Footer />
+          <div className="site-shell">
+            <Navbar />
+            <main id="main-content" className="relative z-10 mx-auto w-full max-w-[90rem] flex-1 px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
+              <BattlesDashboardHeader />
+              {children}
+            </main>
+            <Footer />
+          </div>
         </TournamentProvider>
       </body>
     </html>

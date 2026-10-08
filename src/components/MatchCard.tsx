@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
-import { Match, MatchParticipant } from '@/lib/types';
-import { Trophy, Clock, Swords, Check, ArrowRight } from 'lucide-react';
+import { Match } from '@/lib/types';
+import { Trophy, Check, ArrowRight } from 'lucide-react';
 
 interface MatchCardProps {
   match: Match;
@@ -17,24 +17,26 @@ export default function MatchCard({ match, onClick, compact = false }: MatchCard
   const isWildcard = match.stageType.includes('WILDCARD');
 
   return (
-    <div
+    <button
+      type="button"
       onClick={onClick}
-      className={`group relative rounded-2xl border transition-all duration-200 cursor-pointer overflow-hidden ${
+      className={`group relative w-full overflow-hidden border text-left transition-all duration-200 ${
         isLive
-          ? 'bg-[#131b2e] border-rose-500/60 shadow-lg shadow-rose-500/10 ring-1 ring-rose-500/30'
+          ? 'border-red-500/70 bg-gradient-to-br from-[#1a080d] to-slate-950 shadow-[0_0_0_1px_rgba(239,68,68,0.25),0_18px_40px_rgba(185,28,28,0.25)]'
           : isCompleted
-          ? 'bg-[#0f172a]/90 border-slate-700/60 hover:border-slate-500 hover:bg-[#15203b]'
+          ? 'border-blue-500/15 bg-[#080d18] hover:border-blue-400/45'
           : isBye
-          ? 'bg-[#181329]/90 border-purple-500/40 hover:border-purple-400'
+          ? 'border-blue-500/35 bg-blue-950/20 hover:border-blue-400'
           : isWildcard
-          ? 'bg-[#171622]/90 border-amber-500/30 hover:border-amber-400/60 hover:bg-[#201d30]'
-          : 'bg-[#0e1626]/90 border-white/10 hover:border-sky-500/40 hover:bg-[#131e33]'
-      } ${compact ? 'p-3 text-xs min-w-[220px]' : 'p-4 min-w-[260px] sm:min-w-[280px]'}`}
+          ? 'border-blue-500/25 bg-[#080d18] hover:border-blue-400/60 hover:bg-blue-950/20'
+          : 'border-blue-500/15 bg-[#080d18] hover:-translate-y-0.5 hover:border-blue-400/50 hover:bg-[#0a1222]'
+      } ${compact ? 'min-w-[220px] p-3 text-xs' : 'min-w-[260px] p-4 sm:min-w-[280px]'}`}
     >
+      <span className={`absolute inset-y-0 left-0 w-0.5 ${isLive ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]' : 'bg-blue-600/60'}`} aria-hidden="true" />
       {/* Top Header of the Card */}
-      <div className="flex items-center justify-between gap-2 mb-2.5 pb-2 border-b border-white/5 text-[11px] font-semibold text-slate-400">
+      <div className="mb-3 flex items-center justify-between gap-2 border-b border-blue-500/10 pb-2.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">
         <div className="flex items-center gap-1.5 truncate">
-          <span className="text-white font-bold">
+          <span className="font-bold text-blue-200">
             {match.stageName || match.stageType}
           </span>
           <span className="text-slate-500">•</span>
@@ -44,19 +46,22 @@ export default function MatchCard({ match, onClick, compact = false }: MatchCard
         {/* Status Indicator Pill */}
         <div>
           {isLive && (
-            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-live-pulse" />
+            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black tracking-wider bg-red-500/20 text-red-400 border border-red-500/40 shadow-sm shadow-red-950">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+              </span>
               LIVE
             </span>
           )}
           {isCompleted && (
-            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">
               <Check className="w-2.5 h-2.5 stroke-[3]" />
               FINAL
             </span>
           )}
           {isBye && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
               BYE
             </span>
           )}
@@ -75,81 +80,100 @@ export default function MatchCard({ match, onClick, compact = false }: MatchCard
             <span className="font-bold text-white text-sm">
               {match.participants[0]?.team?.name || 'TBD Team'}
             </span>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-500/20 text-purple-300">
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-300">
               BYE
             </span>
           </div>
           <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
-            <ArrowRight className="w-3 h-3 text-purple-400" />
+            <ArrowRight className="w-3 h-3 text-blue-400" />
             <span>Advanced automatically</span>
           </p>
         </div>
       ) : (
         <div className="space-y-1.5">
-          {match.participants.map((p, idx) => {
-            const isWinner = isCompleted && p.teamId === match.winnerTeamId;
+          {(() => {
+            const slots = match.participants.map((p) => ({
+              id: p.id,
+              isEmpty: !p.teamId,
+              name: p.team?.name || '',
+              score: p.score,
+              isWinner: isCompleted && p.teamId === match.winnerTeamId
+            }));
 
-            return (
-              <div
-                key={p.id}
-                className={`flex items-center justify-between px-2.5 py-2 rounded-xl text-xs transition-colors ${
-                  isWinner
-                    ? 'bg-emerald-500/15 text-white font-bold border border-emerald-500/30'
-                    : isCompleted
-                    ? 'bg-slate-900/40 text-slate-400 opacity-60'
-                    : 'bg-slate-900/70 text-slate-200'
-                }`}
-              >
-                <div className="flex items-center gap-2 truncate pr-2">
-                  <span className="text-[10px] font-mono text-slate-500">
-                    {idx + 1}.
-                  </span>
-                  <div className="truncate">
-                    <div className="flex items-center gap-1.5 truncate">
-                      <span className="truncate block font-medium">
-                        {p.team?.name || p.placeholderText || 'TBD'}
-                      </span>
-                      {p.team && (
-                        <span className={`text-[9px] px-1 py-0.2 rounded font-mono font-bold flex-shrink-0 ${
-                          p.team.lives === 2
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                            : p.team.lives === 1
-                            ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-                            : 'bg-slate-800 text-slate-500'
-                        }`}>
-                          {p.team.lives === 2 ? '2 L' : p.team.lives === 1 ? '1 L' : '0 L'}
-                        </span>
-                      )}
+            // Always ensure at least 2 combatant slots for non-bye matches
+            while (slots.length < 2) {
+              const sNum = slots.length + 1;
+              slots.push({
+                id: `synth-slot-${sNum}`,
+                isEmpty: true,
+                name: '',
+                score: null,
+                isWinner: false
+              });
+            }
+
+            return slots.map((p, idx) => {
+              if (p.isEmpty) {
+                return (
+                  <div
+                    key={p.id}
+                    className="flex h-10 select-none items-center border border-dashed border-blue-500/15 bg-black/20 px-2.5"
+                  />
+                );
+              }
+
+              return (
+                <React.Fragment key={p.id}>
+                  {idx > 0 && (
+                    <div className="flex items-center gap-2 py-0.5 text-[8px] font-black uppercase tracking-[0.2em] text-blue-500/60">
+                      <span className="h-px flex-1 bg-blue-500/10" />VS<span className="h-px flex-1 bg-blue-500/10" />
                     </div>
-                    {p.team?.robotName && (
-                      <span className="text-[10px] text-slate-400 truncate block">
-                        {p.team.robotName}
+                  )}
+                  <div
+                  className={`flex items-center justify-between border px-2.5 py-2.5 text-xs transition-colors ${
+                    p.isWinner
+                      ? 'border-blue-400/35 bg-blue-500/15 font-bold text-white'
+                      : isCompleted
+                      ? 'border-blue-500/10 bg-black/20 text-slate-500'
+                      : 'border-blue-500/10 bg-blue-950/20 text-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 truncate pr-2">
+                    <span className="text-[10px] font-mono text-slate-500">
+                      {idx + 1}.
+                    </span>
+                    <div className="truncate">
+                      <div className="flex items-center gap-1.5 truncate">
+                        <span className="truncate block font-medium">
+                          {p.name}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {typeof p.score === 'number' && p.score !== 0 && (
+                      <span className="font-mono font-bold text-xs px-1.5 py-0.5 rounded bg-black/40 text-white">
+                        {p.score}
                       </span>
                     )}
+                    {p.isWinner && (
+                      <Trophy className="w-3.5 h-3.5 text-blue-400" />
+                    )}
                   </div>
-                </div>
-
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  {p.score !== null && p.score !== undefined && (
-                    <span className="font-mono font-bold text-xs px-1.5 py-0.5 rounded bg-black/40 text-white">
-                      {p.score}
-                    </span>
-                  )}
-                  {isWinner && (
-                    <Trophy className="w-3.5 h-3.5 text-emerald-400" />
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                  </div>
+                </React.Fragment>
+              );
+            });
+          })()}
         </div>
       )}
 
       {/* Card Bottom: Winner pointer or action tip */}
       {isCompleted && match.winnerTeam && (
         <div className="mt-2.5 pt-2 border-t border-white/5 flex items-center justify-between text-[11px]">
-          <span className="text-slate-400 text-[10px]">Advances:</span>
-          <span className="font-bold text-emerald-400 flex items-center gap-1 truncate">
+          <span className="text-blue-300 text-[10px] font-black tracking-wider">WINNER</span>
+          <span className="font-bold text-blue-400 flex items-center gap-1 truncate">
             <span className="truncate">{match.winnerTeam.name}</span>
             <ArrowRight className="w-3 h-3 flex-shrink-0" />
           </span>
@@ -165,6 +189,6 @@ export default function MatchCard({ match, onClick, compact = false }: MatchCard
           </span>
         </div>
       )}
-    </div>
+    </button>
   );
 }

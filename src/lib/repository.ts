@@ -20,7 +20,8 @@ import {
   calculateWildcardGroupSizes,
   calculateReEntryPlan,
   getStageDisplayName,
-  getTargetPowerOfTwo
+  getTargetPowerOfTwo,
+  shuffleArray
 } from './tournament-engine';
 import crypto from 'crypto';
 
@@ -443,50 +444,151 @@ export function setMatchWinner(
       }
     }
 
-    // 3. Propagate winner to next match if linked
-    if (match.nextMatchId) {
-      // Find open slot in next match
-      const nextMatch = getMatchById(match.nextMatchId);
-      if (nextMatch) {
-        // Check if this source match already has a participant slot assigned
-        const existingSlot = nextMatch.participants.find(p => p.sourceMatchId === matchId);
-        if (existingSlot) {
-          db.prepare(`
-            UPDATE match_participants
-            SET team_id = ?, placeholder_text = NULL
-            WHERE id = ?
-          `).run(winnerTeamId, existingSlot.id);
-        } else {
-          // Fill first empty slot or placeholder
-          const emptySlot = nextMatch.participants.find(p => !p.teamId);
-          if (emptySlot) {
+    // 3. Propagate the winner. If the target round contains a single-team BYE,
+    // resolve it immediately and keep advancing until a contested match is met.
+    let sourceMatchId = matchId;
+    const visited = new Set<string>();
+    while (!visited.has(sourceMatchId)) {
+      visited.add(sourceMatchId);
+      const sourceRow = db.prepare('SELECT next_match_id FROM matches WHERE id = ?').get(sourceMatchId) as
+        | { next_match_id: string | null }
+        | undefined;
+      let winnerSlot = db.prepare(`
+        SELECT id, match_id FROM match_participants
+        WHERE source_match_id = ? AND (advancement_source = 'WINNER' OR advancement_source IS NULL) AND team_id IS NULL
+        ORDER BY participant_order ASC
+        LIMIT 1
+      `).get(sourceMatchId) as { id: string; match_id: string } | undefined;
+
+      if (!winnerSlot && sourceRow?.next_match_id) {
+        winnerSlot = db.prepare(`
+          SELECT id, match_id FROM match_participants
+          WHERE match_id = ? AND team_id IS NULL
+          ORDER BY participant_order ASC
+          LIMIT 1
+        `).get(sourceRow.next_match_id) as { id: string; match_id: string } | undefined;
+      }
+
+      if (!winnerSlot) break;
+      db.prepare(`
+        UPDATE match_participants
+        SET team_id = ?, placeholder_text = NULL, advancement_source = 'WINNER'
+        WHERE id = ?
+      `).run(winnerTeamId, winnerSlot.id);
+
+      const targetSlots = db.prepare('SELECT id, team_id FROM match_participants WHERE match_id = ? ORDER BY participant_order').all(winnerSlot.match_id) as { id: string; team_id: string | null }[];
+      if (targetSlots.length === 1 && targetSlots[0].team_id) {
+        db.prepare('UPDATE match_participants SET is_winner = 1 WHERE id = ?').run(targetSlots[0].id);
+        db.prepare(`
+          UPDATE matches
+          SET status = 'BYE', winner_team_id = ?, completed_at = ?, updated_at = ?
+          WHERE id = ?
+        `).run(winnerTeamId, now, now, winnerSlot.match_id);
+        sourceMatchId = winnerSlot.match_id;
+        continue;
+      }
+
+      if (targetSlots.length >= 2 && targetSlots.every(s => s.team_id !== null)) {
+        db.prepare("UPDATE matches SET status = 'SCHEDULED', updated_at = ? WHERE id = ?").run(now, winnerSlot.match_id);
+      }
+      break;
+    }
+
+    // 4. Propagate Losers (Wildcard second chance for teams with lives >= 1)
+    for (const p of match.participants) {
+      if (p.teamId && p.teamId !== winnerTeamId) {
+        const loserLives = calculateTeamLives(p.teamId);
+        if (loserLives >= 1) {
+          // Find wildcard participant slot waiting for the loser of this match
+          let wcSlot = db.prepare(`
+            SELECT id, match_id FROM match_participants
+            WHERE source_match_id = ? AND advancement_source = 'WILDCARD_DROP' AND team_id IS NULL
+            ORDER BY participant_order ASC
+            LIMIT 1
+          `).get(matchId) as { id: string; match_id: string } | undefined;
+
+          // Fallback: check match.wildcardMatchId
+          if (!wcSlot && match.wildcardMatchId) {
+            wcSlot = db.prepare(`
+              SELECT id, match_id FROM match_participants
+              WHERE match_id = ? AND team_id IS NULL
+              ORDER BY participant_order ASC
+              LIMIT 1
+            `).get(match.wildcardMatchId) as { id: string; match_id: string } | undefined;
+          }
+
+          if (wcSlot) {
             db.prepare(`
               UPDATE match_participants
-              SET team_id = ?, placeholder_text = NULL, source_match_id = ?
+              SET team_id = ?, placeholder_text = NULL, advancement_source = 'WILDCARD_DROP'
               WHERE id = ?
-            `).run(winnerTeamId, matchId, emptySlot.id);
+            `).run(p.teamId, wcSlot.id);
+
+            db.prepare("UPDATE teams SET status = 'WILDCARD' WHERE id = ?").run(p.teamId);
+
+            const wcSlots = db.prepare('SELECT team_id FROM match_participants WHERE match_id = ?').all(wcSlot.match_id) as { team_id: string | null }[];
+            if (wcSlots.length >= 2 && wcSlots.every(s => s.team_id !== null)) {
+              db.prepare("UPDATE matches SET status = 'SCHEDULED', updated_at = ? WHERE id = ?").run(now, wcSlot.match_id);
+            }
           }
+        } else {
+          db.prepare("UPDATE teams SET status = 'ELIMINATED' WHERE id = ?").run(p.teamId);
         }
       }
     }
 
-    // 4. Check if all matches in stage are completed to mark stage COMPLETED
-    const remainingInStage = db.prepare(`
-      SELECT COUNT(*) as count FROM matches
-      WHERE stage_id = ? AND status != 'COMPLETED' AND status != 'BYE'
-    `).get(match.stageId) as { count: number };
+    // 5. Grand Finals Championship Check
+    if (match.stageType === 'FINAL') {
+      db.prepare("UPDATE teams SET status = 'CHAMPION' WHERE id = ?").run(winnerTeamId);
+      for (const p of match.participants) {
+        if (p.teamId && p.teamId !== winnerTeamId) {
+          db.prepare("UPDATE teams SET status = 'FINALIST' WHERE id = ?").run(p.teamId);
+        }
+      }
+      db.prepare("UPDATE stages SET status = 'COMPLETED', completed_at = ? WHERE id = ?").run(now, match.stageId);
+    } else {
+      // 6. Check if all matches in stage are completed to mark stage COMPLETED
+      const remainingInStage = db.prepare(`
+        SELECT COUNT(*) as count FROM matches
+        WHERE stage_id = ? AND status != 'COMPLETED' AND status != 'BYE'
+      `).get(match.stageId) as { count: number };
 
-    if (remainingInStage.count === 0) {
-      db.prepare(`
-        UPDATE stages
-        SET status = 'COMPLETED', completed_at = ?
-        WHERE id = ?
-      `).run(now, match.stageId);
+      if (remainingInStage.count === 0) {
+        db.prepare(`
+          UPDATE stages
+          SET status = 'COMPLETED', completed_at = ?
+          WHERE id = ?
+        `).run(now, match.stageId);
+
+        // Find next stage with ready matches and make it ACTIVE
+        const nextPending = db.prepare(`
+          SELECT s.id FROM stages s
+          JOIN matches m ON s.id = m.stage_id
+          WHERE s.category_id = ? AND s.status = 'PENDING'
+          GROUP BY s.id
+          ORDER BY s.stage_order ASC
+          LIMIT 1
+        `).get(match.categoryId) as { id: string } | undefined;
+
+        if (nextPending) {
+          db.prepare(`
+            UPDATE stages SET status = 'ACTIVE', started_at = ? WHERE id = ?
+          `).run(now, nextPending.id);
+        }
+      }
     }
   });
 
   try {
     transaction();
+
+    // Sync to Supabase in background
+    import('@/lib/supabase').then(({ syncTournamentStateToSupabase, isSupabaseConfigured }) => {
+      if (isSupabaseConfigured()) {
+        syncTournamentStateToSupabase(match.categoryId).catch(() => {});
+      }
+    });
+
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message };
@@ -609,6 +711,679 @@ export function correctMatchWinner(
 // -------------------------------------------------------------
 // TOURNAMENT STAGE GENERATION
 // -------------------------------------------------------------
+
+/**
+ * CONFIRM & LOCK TEAMS:
+ * Locks confirmed teams into the tournament and generates the complete bracket architecture.
+ * Real teams are assigned to Round 1; downstream matches are pre-created with linked placeholder
+ * slots so winners and losers advance live as matches complete!
+ */
+export function confirmTeamsAndGenerateFullBracket(
+  categoryId: string,
+  randomize: boolean = false
+): { success: boolean; error?: string; message?: string } {
+  const teams = getTeams(categoryId).filter(t => !t.isWithdrawn);
+  if (teams.length < 2) {
+    return {
+      success: false,
+      error: 'At least 2 active teams are required to build a tournament bracket.'
+    };
+  }
+
+  // Check if stages already exist for this category
+  const existingStages = db.prepare("SELECT COUNT(*) as count FROM stages WHERE category_id = ?").get(categoryId) as { count: number };
+  if (existingStages.count > 0) {
+    return {
+      success: false,
+      error: 'Tournament bracket has already been generated. Reset tournament first if you wish to re-generate.'
+    };
+  }
+
+  let orderedTeams = [...teams];
+  if (randomize) {
+    orderedTeams = shuffleArray(orderedTeams);
+  } else {
+    // Sort by seed if available, otherwise preserve order
+    orderedTeams.sort((a, b) => {
+      if (a.seed && b.seed) return a.seed - b.seed;
+      if (a.seed) return -1;
+      if (b.seed) return 1;
+      return 0;
+    });
+  }
+
+  const N = orderedTeams.length;
+  const now = new Date().toISOString();
+
+  const transaction = db.transaction(() => {
+    // 1. Reset all teams to ACTIVE with 2 lives
+    db.prepare("UPDATE teams SET lives = 2, status = 'ACTIVE' WHERE category_id = ?").run(categoryId);
+
+    // Helpers
+    const createStage = (stageType: StageType, stageOrder: number, displayName: string, status: 'ACTIVE' | 'PENDING' = 'PENDING') => {
+      const stageId = crypto.randomUUID();
+      db.prepare(`
+        INSERT INTO stages (id, category_id, stage_type, stage_order, display_name, status, started_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(stageId, categoryId, stageType, stageOrder, displayName, status, status === 'ACTIVE' ? now : null);
+      return stageId;
+    };
+
+    const createMatch = (data: {
+      id?: string;
+      stageId: string;
+      stageType: StageType;
+      matchNumber: number;
+      roundOrder: number;
+      status?: 'SCHEDULED' | 'BYE' | 'LIVE' | 'COMPLETED';
+      winnerTeamId?: string | null;
+      nextMatchId?: string | null;
+      wildcardMatchId?: string | null;
+    }) => {
+      const matchId = data.id || crypto.randomUUID();
+      db.prepare(`
+        INSERT INTO matches (id, category_id, stage_id, stage_type, match_number, round_order, status, winner_team_id, completed_at, next_match_id, wildcard_match_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        matchId,
+        categoryId,
+        data.stageId,
+        data.stageType,
+        data.matchNumber,
+        data.roundOrder,
+        data.status || 'SCHEDULED',
+        data.winnerTeamId || null,
+        data.status === 'BYE' ? now : null,
+        data.nextMatchId || null,
+        data.wildcardMatchId || null,
+        now,
+        now
+      );
+      return matchId;
+    };
+
+    const addParticipant = (data: {
+      matchId: string;
+      order: number;
+      teamId?: string | null;
+      placeholderText?: string | null;
+      isWinner?: boolean;
+      sourceMatchId?: string | null;
+      advancementSource?: string | null;
+    }) => {
+      const pId = crypto.randomUUID();
+      db.prepare(`
+        INSERT INTO match_participants (id, match_id, team_id, placeholder_text, participant_order, is_winner, score, source_match_id, advancement_source)
+        VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
+      `).run(
+        pId,
+        data.matchId,
+        data.teamId || null,
+        data.placeholderText || null,
+        data.order,
+        data.isWinner ? 1 : 0,
+        data.sourceMatchId || null,
+        data.advancementSource || (data.teamId ? 'SEED' : null)
+      );
+      return pId;
+    };
+
+    // -------------------------------------------------------------
+    // BUILD BRACKET SLOTS BASED ON PARTICIPANT COUNT
+    // -------------------------------------------------------------
+    if (N === 2) {
+      const stageFinal = createStage('FINAL', 1, 'Grand Finals', 'ACTIVE');
+      const m1 = createMatch({ stageId: stageFinal, stageType: 'FINAL', matchNumber: 1, roundOrder: 1, status: 'SCHEDULED' });
+      addParticipant({ matchId: m1, order: 1, teamId: orderedTeams[0].id });
+      addParticipant({ matchId: m1, order: 2, teamId: orderedTeams[1].id });
+    } else if (N === 3) {
+      const sR1 = createStage('ROUND_1', 1, 'Round 1 (2v2)', 'ACTIVE');
+      const sWC = createStage('WILDCARD', 2, 'Wildcard Qualifier', 'PENDING');
+      const sFinal = createStage('FINAL', 3, 'Grand Finals', 'PENDING');
+
+      const finalId = crypto.randomUUID();
+      const wcId = crypto.randomUUID();
+      const r1_1 = crypto.randomUUID();
+      const r1_bye = crypto.randomUUID();
+
+      createMatch({ id: r1_1, stageId: sR1, stageType: 'ROUND_1', matchNumber: 1, roundOrder: 1, status: 'SCHEDULED', nextMatchId: finalId, wildcardMatchId: wcId });
+      addParticipant({ matchId: r1_1, order: 1, teamId: orderedTeams[0].id });
+      addParticipant({ matchId: r1_1, order: 2, teamId: orderedTeams[1].id });
+
+      createMatch({ id: r1_bye, stageId: sR1, stageType: 'ROUND_1', matchNumber: 2, roundOrder: 1, status: 'BYE', winnerTeamId: orderedTeams[2].id, nextMatchId: finalId });
+      addParticipant({ matchId: r1_bye, order: 1, teamId: orderedTeams[2].id, isWinner: true });
+
+      createMatch({ id: wcId, stageId: sWC, stageType: 'WILDCARD', matchNumber: 1, roundOrder: 1, status: 'SCHEDULED', nextMatchId: finalId });
+      addParticipant({ matchId: wcId, order: 1, sourceMatchId: r1_1, advancementSource: 'WILDCARD_DROP' });
+
+      createMatch({ id: finalId, stageId: sFinal, stageType: 'FINAL', matchNumber: 1, roundOrder: 2, status: 'SCHEDULED' });
+      addParticipant({ matchId: finalId, order: 1, teamId: orderedTeams[2].id, advancementSource: 'ROUND_1_BYE' });
+      addParticipant({ matchId: finalId, order: 2, sourceMatchId: r1_1, advancementSource: 'WINNER' });
+    } else if (N === 4) {
+      const sR1 = createStage('ROUND_1', 1, 'Round 1 (Semifinals)', 'ACTIVE');
+      const sWC = createStage('WILDCARD', 2, 'Wildcard Decider', 'PENDING');
+      const sWF = createStage('WINNERS_FINAL', 3, 'Winners Final', 'PENDING');
+      const sFinal = createStage('FINAL', 4, 'Grand Finals', 'PENDING');
+
+      const finalId = crypto.randomUUID();
+      const wfId = crypto.randomUUID();
+      const wcId = crypto.randomUUID();
+      const r1_1 = crypto.randomUUID();
+      const r1_2 = crypto.randomUUID();
+
+      createMatch({ id: r1_1, stageId: sR1, stageType: 'ROUND_1', matchNumber: 1, roundOrder: 1, status: 'SCHEDULED', nextMatchId: wfId, wildcardMatchId: wcId });
+      addParticipant({ matchId: r1_1, order: 1, teamId: orderedTeams[0].id });
+      addParticipant({ matchId: r1_1, order: 2, teamId: orderedTeams[3].id });
+
+      createMatch({ id: r1_2, stageId: sR1, stageType: 'ROUND_1', matchNumber: 2, roundOrder: 1, status: 'SCHEDULED', nextMatchId: wfId, wildcardMatchId: wcId });
+      addParticipant({ matchId: r1_2, order: 1, teamId: orderedTeams[1].id });
+      addParticipant({ matchId: r1_2, order: 2, teamId: orderedTeams[2].id });
+
+      createMatch({ id: wcId, stageId: sWC, stageType: 'WILDCARD', matchNumber: 1, roundOrder: 1, status: 'SCHEDULED', nextMatchId: finalId });
+      addParticipant({ matchId: wcId, order: 1, sourceMatchId: r1_1, advancementSource: 'WILDCARD_DROP' });
+      addParticipant({ matchId: wcId, order: 2, sourceMatchId: r1_2, advancementSource: 'WILDCARD_DROP' });
+
+      createMatch({ id: wfId, stageId: sWF, stageType: 'WINNERS_FINAL', matchNumber: 1, roundOrder: 2, status: 'SCHEDULED', nextMatchId: finalId });
+      addParticipant({ matchId: wfId, order: 1, sourceMatchId: r1_1, advancementSource: 'WINNER' });
+      addParticipant({ matchId: wfId, order: 2, sourceMatchId: r1_2, advancementSource: 'WINNER' });
+
+      createMatch({ id: finalId, stageId: sFinal, stageType: 'FINAL', matchNumber: 1, roundOrder: 3, status: 'SCHEDULED' });
+      addParticipant({ matchId: finalId, order: 1, sourceMatchId: wfId, advancementSource: 'WINNER' });
+      addParticipant({ matchId: finalId, order: 2, sourceMatchId: wcId, advancementSource: 'WINNER' });
+    } else if (N <= 8) {
+      // 5 to 8 Teams: Target 8-bracket with Semifinals
+      const sR1 = createStage('ROUND_1', 1, 'Round 1 (Main 2v2)', 'ACTIVE');
+      const sWC = createStage('WILDCARD', 2, 'Round 1 Wildcard (3-Way / 2-Way)', 'PENDING');
+      const sSF = createStage('SEMIFINAL', 3, 'Semifinals (Main 2v2)', 'PENDING');
+      const sSWC = createStage('SEMIFINAL_WILDCARD', 4, 'Wildcard Semifinals', 'PENDING');
+      const sWF = createStage('WINNERS_FINAL', 5, 'Winners Final (Upper Championship)', 'PENDING');
+      const sWCF = createStage('WILDCARD_FINAL', 6, 'Wildcard Final (Lower Championship)', 'PENDING');
+      const sFinal = createStage('FINAL', 7, 'Grand Finals (Apex Championship)', 'PENDING');
+
+      const finalId = crypto.randomUUID();
+      const wcfId = crypto.randomUUID();
+      const wfId = crypto.randomUUID();
+      const swcId = crypto.randomUUID();
+      const sf1Id = crypto.randomUUID();
+      const sf2Id = crypto.randomUUID();
+
+      // For 8-bracket: 4 Semifinal feeder slots
+      // Number of BYEs to Semifinals = 8 - N
+      // Number of Round 1 matches = N - 4
+      const numByes = 8 - N;
+      const numR1Matches = N - 4;
+      const r1MatchIds: string[] = [];
+      const wcMatchId = crypto.randomUUID();
+
+      const byeTeams = orderedTeams.slice(0, numByes);
+      const r1Teams = orderedTeams.slice(numByes);
+
+      // Create Round 1 Matches
+      for (let i = 0; i < numR1Matches; i++) {
+        const r1Id = crypto.randomUUID();
+        r1MatchIds.push(r1Id);
+
+        createMatch({
+          id: r1Id,
+          stageId: sR1,
+          stageType: 'ROUND_1',
+          matchNumber: i + 1,
+          roundOrder: 1,
+          status: 'SCHEDULED',
+          nextMatchId: i === 0 ? sf1Id : sf2Id,
+          wildcardMatchId: wcMatchId
+        });
+
+        addParticipant({ matchId: r1Id, order: 1, teamId: r1Teams[i * 2].id });
+        addParticipant({ matchId: r1Id, order: 2, teamId: r1Teams[i * 2 + 1].id });
+      }
+
+      // Round 1 Wildcard Matches (all R1 losers drop here for second chance)
+      const r1WcGroupSizes = calculateWildcardGroupSizes(numR1Matches);
+      const r1WcMatchIds: string[] = [];
+      let r1LoserIdx = 0;
+
+      for (let g = 0; g < r1WcGroupSizes.length; g++) {
+        const groupSize = r1WcGroupSizes[g];
+        const wcMatchId = crypto.randomUUID();
+        r1WcMatchIds.push(wcMatchId);
+
+        createMatch({
+          id: wcMatchId,
+          stageId: sWC,
+          stageType: 'WILDCARD',
+          matchNumber: g + 1,
+          roundOrder: 1,
+          status: 'SCHEDULED'
+        });
+
+        for (let s = 0; s < groupSize; s++) {
+          const srcMatchId = r1MatchIds[r1LoserIdx];
+          addParticipant({
+            matchId: wcMatchId,
+            order: s + 1,
+            sourceMatchId: srcMatchId,
+            advancementSource: 'WILDCARD_DROP'
+          });
+          db.prepare("UPDATE matches SET wildcard_match_id = ? WHERE id = ?").run(wcMatchId, srcMatchId);
+          r1LoserIdx++;
+        }
+      }
+
+      // Build Semifinals (Main 2v2)
+      createMatch({ id: sf1Id, stageId: sSF, stageType: 'SEMIFINAL', matchNumber: 1, roundOrder: 2, status: 'SCHEDULED', nextMatchId: wfId, wildcardMatchId: swcId });
+      createMatch({ id: sf2Id, stageId: sSF, stageType: 'SEMIFINAL', matchNumber: 2, roundOrder: 2, status: 'SCHEDULED', nextMatchId: wfId, wildcardMatchId: swcId });
+
+      // Pre-fill SF1 & SF2 with BYEs and R1 winner placeholders
+      let byeIdx = 0;
+      let r1Idx = 0;
+      const sfConfigs = [
+        { matchId: sf1Id, order: 1 },
+        { matchId: sf1Id, order: 2 },
+        { matchId: sf2Id, order: 1 },
+        { matchId: sf2Id, order: 2 }
+      ];
+
+      for (let slot = 0; slot < 4; slot++) {
+        const cfg = sfConfigs[slot];
+        if (byeIdx < numByes) {
+          const t = byeTeams[byeIdx++];
+          addParticipant({
+            matchId: cfg.matchId,
+            order: cfg.order,
+            teamId: t.id,
+            advancementSource: 'ROUND_1_BYE'
+          });
+        } else if (r1Idx < numR1Matches) {
+          const sourceId = r1MatchIds[r1Idx++];
+          addParticipant({
+            matchId: cfg.matchId,
+            order: cfg.order,
+            sourceMatchId: sourceId,
+            advancementSource: 'WINNER'
+          });
+        }
+      }
+
+      // Wildcard Semifinal (WC Winner vs SF1 Loser vs SF2 Loser)
+      createMatch({ id: swcId, stageId: sSWC, stageType: 'SEMIFINAL_WILDCARD', matchNumber: 1, roundOrder: 3, status: 'SCHEDULED', nextMatchId: wcfId });
+      addParticipant({ matchId: swcId, order: 1, sourceMatchId: wcMatchId, advancementSource: 'WINNER' });
+      addParticipant({ matchId: swcId, order: 2, sourceMatchId: sf1Id, advancementSource: 'WILDCARD_DROP' });
+      addParticipant({ matchId: swcId, order: 3, sourceMatchId: sf2Id, advancementSource: 'WILDCARD_DROP' });
+
+      // Winners Final (Winner SF1 vs Winner SF2)
+      createMatch({ id: wfId, stageId: sWF, stageType: 'WINNERS_FINAL', matchNumber: 1, roundOrder: 4, status: 'SCHEDULED', nextMatchId: finalId, wildcardMatchId: wcfId });
+      addParticipant({ matchId: wfId, order: 1, sourceMatchId: sf1Id, advancementSource: 'WINNER' });
+      addParticipant({ matchId: wfId, order: 2, sourceMatchId: sf2Id, advancementSource: 'WINNER' });
+
+      // Wildcard Final (Wildcard Semifinal Winner vs Loser of Winners Final)
+      createMatch({ id: wcfId, stageId: sWCF, stageType: 'WILDCARD_FINAL', matchNumber: 1, roundOrder: 5, status: 'SCHEDULED', nextMatchId: finalId });
+      addParticipant({ matchId: wcfId, order: 1, sourceMatchId: swcId, advancementSource: 'WINNER' });
+      addParticipant({ matchId: wcfId, order: 2, sourceMatchId: wfId, advancementSource: 'WILDCARD_DROP' });
+
+      // Grand Finals (Apex Championship)
+      createMatch({ id: finalId, stageId: sFinal, stageType: 'FINAL', matchNumber: 1, roundOrder: 6, status: 'SCHEDULED' });
+      addParticipant({ matchId: finalId, order: 1, sourceMatchId: wfId, advancementSource: 'WINNER' });
+      addParticipant({ matchId: finalId, order: 2, sourceMatchId: wcfId, advancementSource: 'WINNER' });
+    } else {
+      // 9 to 16 teams: pair every available team 1v1 in each round.
+      // If a round has an odd number, exactly one team advances via BYE.
+      const sR1 = createStage('ROUND_1', 1, 'Round 1 (Main 2v2)', 'ACTIVE');
+      const sWC = createStage('WILDCARD', 2, 'Round 1 Wildcard (3-Way / 2-Way)', 'PENDING');
+      const sQF = createStage('QUARTERFINAL', 3, 'Quarterfinals (Main 2v2)', 'PENDING');
+      const sQFWC = createStage('QUARTERFINAL_WILDCARD', 4, 'Quarterfinals Wildcard', 'PENDING');
+      const sSF = createStage('SEMIFINAL', 5, 'Semifinals (Main 2v2)', 'PENDING');
+      const sSWC = createStage('SEMIFINAL_WILDCARD', 6, 'Wildcard Semifinals', 'PENDING');
+      const sWF = createStage('WINNERS_FINAL', 7, 'Winners Final (Upper Championship)', 'PENDING');
+      const sWCF = createStage('WILDCARD_FINAL', 8, 'Wildcard Final (Lower Championship)', 'PENDING');
+      const sFinal = createStage('FINAL', 9, 'Grand Finals (Apex Championship)', 'PENDING');
+
+      const finalId = crypto.randomUUID();
+      const wfId = crypto.randomUUID();
+      const sf1Id = crypto.randomUUID();
+      const sf2Id = crypto.randomUUID();
+      const numByes = N % 2;
+      const numR1Matches = Math.floor(N / 2);
+      const r1AdvancerCount = numR1Matches + numByes;
+      const qfMatchCount = Math.ceil(r1AdvancerCount / 2);
+      const qfContestedCount = Math.floor(r1AdvancerCount / 2);
+      const qfIds = Array.from({ length: qfMatchCount }, () => crypto.randomUUID());
+      const r1MatchIds: string[] = [];
+      const byeMatchIds: string[] = [];
+
+      const byeTeams = numByes ? orderedTeams.slice(0, 1) : [];
+      const r1Teams = orderedTeams.slice(numByes);
+
+      // Create Round 1 Matches
+      for (let i = 0; i < numR1Matches; i++) {
+        const r1Id = crypto.randomUUID();
+        r1MatchIds.push(r1Id);
+
+        createMatch({
+          id: r1Id,
+          stageId: sR1,
+          stageType: 'ROUND_1',
+          matchNumber: i + 1,
+          roundOrder: 1,
+          status: 'SCHEDULED',
+          nextMatchId: qfIds[Math.floor((numByes + i) / 2)]
+        });
+
+        addParticipant({ matchId: r1Id, order: 1, teamId: r1Teams[i * 2].id });
+        addParticipant({ matchId: r1Id, order: 2, teamId: r1Teams[i * 2 + 1].id });
+      }
+
+      // With an odd roster, the top seed is the only opening-round BYE.
+      for (let i = 0; i < byeTeams.length; i++) {
+        const byeId = crypto.randomUUID();
+        const team = byeTeams[i];
+        byeMatchIds.push(byeId);
+
+        createMatch({
+          id: byeId,
+          stageId: sR1,
+          stageType: 'ROUND_1',
+          matchNumber: numR1Matches + i + 1,
+          roundOrder: 1,
+          status: 'BYE',
+          winnerTeamId: team.id,
+          nextMatchId: qfIds[Math.floor(i / 2)]
+        });
+        addParticipant({
+          matchId: byeId,
+          order: 1,
+          teamId: team.id,
+          isWinner: true,
+          advancementSource: 'ROUND_1_BYE'
+        });
+      }
+
+      // 1. Round 1 Wildcard (All R1 losers drop here into 3-way & 2-way matches)
+      const r1WcGroupSizes = calculateWildcardGroupSizes(numR1Matches);
+      const r1WcMatchIds: string[] = [];
+      let r1LoserIdx = 0;
+
+      for (let g = 0; g < r1WcGroupSizes.length; g++) {
+        const groupSize = r1WcGroupSizes[g];
+        const wcMatchId = crypto.randomUUID();
+        r1WcMatchIds.push(wcMatchId);
+
+        createMatch({
+          id: wcMatchId,
+          stageId: sWC,
+          stageType: 'WILDCARD',
+          matchNumber: g + 1,
+          roundOrder: 1,
+          status: 'SCHEDULED'
+        });
+
+        for (let s = 0; s < groupSize; s++) {
+          const srcMatchId = r1MatchIds[r1LoserIdx];
+          addParticipant({
+            matchId: wcMatchId,
+            order: s + 1,
+            sourceMatchId: srcMatchId,
+            advancementSource: 'WILDCARD_DROP'
+          });
+
+          // Link Round 1 match's wildcard destination
+          db.prepare("UPDATE matches SET wildcard_match_id = ? WHERE id = ?").run(wcMatchId, srcMatchId);
+          r1LoserIdx++;
+        }
+      }
+
+      // Pair the Round 1 advancers. An odd remainder creates one QF BYE.
+      for (let q = 0; q < qfIds.length; q++) {
+        const targetSF = q < 2 ? sf1Id : sf2Id;
+        const isRoundBye = q === qfIds.length - 1 && r1AdvancerCount % 2 === 1;
+        createMatch({
+          id: qfIds[q],
+          stageId: sQF,
+          stageType: 'QUARTERFINAL',
+          matchNumber: q + 1,
+          roundOrder: 2,
+          status: isRoundBye ? 'BYE' : 'SCHEDULED',
+          nextMatchId: targetSF
+        });
+      }
+
+      const qfSlots = Array.from({ length: r1AdvancerCount }, (_, index) => ({
+        matchId: qfIds[Math.floor(index / 2)],
+        order: (index % 2) + 1
+      }));
+
+      for (let s = 0; s < qfSlots.length; s++) {
+        const cfg = qfSlots[s];
+        if (s < numByes) {
+          const team = byeTeams[s];
+          addParticipant({
+            matchId: cfg.matchId,
+            order: cfg.order,
+            teamId: team.id,
+            sourceMatchId: byeMatchIds[s],
+            advancementSource: 'WINNER'
+          });
+        } else {
+          const srcId = r1MatchIds[s - numByes];
+          addParticipant({
+            matchId: cfg.matchId,
+            order: cfg.order,
+            sourceMatchId: srcId,
+            advancementSource: 'WINNER'
+          });
+        }
+      }
+
+      // 2. Quarterfinals Wildcard (R1 Wildcard winners + Quarterfinals losers)
+      const qfWcTotalTeams = r1WcMatchIds.length + qfContestedCount;
+      const qfWcGroupSizes = calculateWildcardGroupSizes(qfWcTotalTeams);
+      const qfWcMatchIds: string[] = [];
+
+      const qfWcContenders: Array<{
+        sourceMatchId: string;
+        advancementSource: 'WINNER' | 'WILDCARD_DROP';
+      }> = [];
+
+      // Add R1 Wildcard winners
+      r1WcMatchIds.forEach((mId) => {
+        qfWcContenders.push({
+          sourceMatchId: mId,
+          advancementSource: 'WINNER'
+        });
+      });
+
+      // Only contested matches produce a loser; a BYE never enters Wildcard.
+      qfIds.slice(0, qfContestedCount).forEach((qfId) => {
+        qfWcContenders.push({
+          sourceMatchId: qfId,
+          advancementSource: 'WILDCARD_DROP'
+        });
+      });
+
+      let qfWcContenderIdx = 0;
+      for (let g = 0; g < qfWcGroupSizes.length; g++) {
+        const groupSize = qfWcGroupSizes[g];
+        const matchId = crypto.randomUUID();
+        qfWcMatchIds.push(matchId);
+
+        createMatch({
+          id: matchId,
+          stageId: sQFWC,
+          stageType: 'QUARTERFINAL_WILDCARD',
+          matchNumber: g + 1,
+          roundOrder: 3,
+          status: 'SCHEDULED'
+        });
+
+        for (let s = 0; s < groupSize; s++) {
+          const c = qfWcContenders[qfWcContenderIdx++];
+          addParticipant({
+            matchId: matchId,
+            order: s + 1,
+            sourceMatchId: c.sourceMatchId,
+            advancementSource: c.advancementSource
+          });
+
+          if (c.advancementSource === 'WILDCARD_DROP') {
+            db.prepare("UPDATE matches SET wildcard_match_id = ? WHERE id = ?").run(matchId, c.sourceMatchId);
+          } else {
+            db.prepare("UPDATE matches SET next_match_id = ? WHERE id = ?").run(matchId, c.sourceMatchId);
+          }
+        }
+      }
+
+      // Semifinals: pair QF winners, with one BYE only when the count is odd.
+      createMatch({ id: sf1Id, stageId: sSF, stageType: 'SEMIFINAL', matchNumber: 1, roundOrder: 4, status: 'SCHEDULED', nextMatchId: wfId });
+      addParticipant({ matchId: sf1Id, order: 1, sourceMatchId: qfIds[0], advancementSource: 'WINNER' });
+      addParticipant({ matchId: sf1Id, order: 2, sourceMatchId: qfIds[1], advancementSource: 'WINNER' });
+
+      const sf2IsBye = qfIds.length === 3;
+      createMatch({ id: sf2Id, stageId: sSF, stageType: 'SEMIFINAL', matchNumber: 2, roundOrder: 4, status: sf2IsBye ? 'BYE' : 'SCHEDULED', nextMatchId: wfId });
+      addParticipant({ matchId: sf2Id, order: 1, sourceMatchId: qfIds[2], advancementSource: 'WINNER' });
+      if (qfIds[3]) {
+        addParticipant({ matchId: sf2Id, order: 2, sourceMatchId: qfIds[3], advancementSource: 'WINNER' });
+      }
+
+      // 3. Semifinals Wildcard (QF Wildcard winners + Semifinals losers)
+      const sfContestedIds = sf2IsBye ? [sf1Id] : [sf1Id, sf2Id];
+      const sfWcTotalTeams = qfWcMatchIds.length + sfContestedIds.length;
+      const sfWcGroupSizes = calculateWildcardGroupSizes(sfWcTotalTeams);
+      const sfWcMatchIds: string[] = [];
+
+      const sfWcContenders: Array<{
+        sourceMatchId: string;
+        advancementSource: 'WINNER' | 'WILDCARD_DROP';
+      }> = [];
+
+      qfWcMatchIds.forEach((mId) => {
+        sfWcContenders.push({
+          sourceMatchId: mId,
+          advancementSource: 'WINNER'
+        });
+      });
+
+      sfContestedIds.forEach((matchId) => sfWcContenders.push({
+        sourceMatchId: matchId,
+        advancementSource: 'WILDCARD_DROP'
+      }));
+
+      let sfWcContenderIdx = 0;
+      for (let g = 0; g < sfWcGroupSizes.length; g++) {
+        const groupSize = sfWcGroupSizes[g];
+        const matchId = crypto.randomUUID();
+        sfWcMatchIds.push(matchId);
+
+        createMatch({
+          id: matchId,
+          stageId: sSWC,
+          stageType: 'SEMIFINAL_WILDCARD',
+          matchNumber: g + 1,
+          roundOrder: 5,
+          status: 'SCHEDULED'
+        });
+
+        for (let s = 0; s < groupSize; s++) {
+          const c = sfWcContenders[sfWcContenderIdx++];
+          addParticipant({
+            matchId: matchId,
+            order: s + 1,
+            sourceMatchId: c.sourceMatchId,
+            advancementSource: c.advancementSource
+          });
+
+          if (c.advancementSource === 'WILDCARD_DROP') {
+            db.prepare("UPDATE matches SET wildcard_match_id = ? WHERE id = ?").run(matchId, c.sourceMatchId);
+          } else {
+            db.prepare("UPDATE matches SET next_match_id = ? WHERE id = ?").run(matchId, c.sourceMatchId);
+          }
+        }
+      }
+
+      // Winners Final (Main 2v2)
+      createMatch({ id: wfId, stageId: sWF, stageType: 'WINNERS_FINAL', matchNumber: 1, roundOrder: 6, status: 'SCHEDULED', nextMatchId: finalId });
+      addParticipant({ matchId: wfId, order: 1, sourceMatchId: sf1Id, advancementSource: 'WINNER' });
+      addParticipant({ matchId: wfId, order: 2, sourceMatchId: sf2Id, advancementSource: 'WINNER' });
+
+      // 4. Wildcard Final (Semifinal Wildcard winners + Loser of Winners Final)
+      const wcFinalTotalTeams = sfWcMatchIds.length + 1;
+      const wcFinalGroupSizes = calculateWildcardGroupSizes(wcFinalTotalTeams);
+      const wcFinalMatchIds: string[] = [];
+
+      const wcFinalContenders: Array<{
+        sourceMatchId: string;
+        advancementSource: 'WINNER' | 'WILDCARD_DROP';
+      }> = [];
+
+      sfWcMatchIds.forEach((mId) => {
+        wcFinalContenders.push({
+          sourceMatchId: mId,
+          advancementSource: 'WINNER'
+        });
+      });
+
+      wcFinalContenders.push({
+        sourceMatchId: wfId,
+        advancementSource: 'WILDCARD_DROP'
+      });
+
+      let wcFinalContenderIdx = 0;
+      for (let g = 0; g < wcFinalGroupSizes.length; g++) {
+        const groupSize = wcFinalGroupSizes[g];
+        const matchId = crypto.randomUUID();
+        wcFinalMatchIds.push(matchId);
+
+        createMatch({
+          id: matchId,
+          stageId: sWCF,
+          stageType: 'WILDCARD_FINAL',
+          matchNumber: g + 1,
+          roundOrder: 7,
+          status: 'SCHEDULED',
+          nextMatchId: finalId
+        });
+
+        for (let s = 0; s < groupSize; s++) {
+          const c = wcFinalContenders[wcFinalContenderIdx++];
+          addParticipant({
+            matchId: matchId,
+            order: s + 1,
+            sourceMatchId: c.sourceMatchId,
+            advancementSource: c.advancementSource
+          });
+
+          if (c.advancementSource === 'WILDCARD_DROP') {
+            db.prepare("UPDATE matches SET wildcard_match_id = ? WHERE id = ?").run(matchId, c.sourceMatchId);
+          } else {
+            db.prepare("UPDATE matches SET next_match_id = ? WHERE id = ?").run(matchId, c.sourceMatchId);
+          }
+        }
+      }
+
+      // 5. Grand Finals (Apex Showdown: Winners Champion vs Wildcard Champion)
+      createMatch({ id: finalId, stageId: sFinal, stageType: 'FINAL', matchNumber: 1, roundOrder: 8, status: 'SCHEDULED' });
+      addParticipant({ matchId: finalId, order: 1, sourceMatchId: wfId, advancementSource: 'WINNER' });
+      addParticipant({ matchId: finalId, order: 2, sourceMatchId: wcFinalMatchIds[0], advancementSource: 'WINNER' });
+    }
+  });
+
+  try {
+    transaction();
+
+    // Sync to Supabase in background
+    import('@/lib/supabase').then(({ syncTournamentStateToSupabase, isSupabaseConfigured }) => {
+      if (isSupabaseConfigured()) {
+        syncTournamentStateToSupabase(categoryId).catch(() => {});
+      }
+    });
+
+    return {
+      success: true,
+      message: `Tournament confirmed! ${N} teams locked and full bracket slots generated.`
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
 
 /**
  * PHASE 2: Round 1 Generator
@@ -1491,6 +2266,14 @@ export function resetCategoryTournament(categoryId: string): { success: boolean;
 
   try {
     transaction();
+
+    // Clear from Supabase in background
+    import('@/lib/supabase').then(({ clearTournamentFromSupabase, isSupabaseConfigured }) => {
+      if (isSupabaseConfigured()) {
+        clearTournamentFromSupabase(categoryId).catch(() => {});
+      }
+    });
+
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message };

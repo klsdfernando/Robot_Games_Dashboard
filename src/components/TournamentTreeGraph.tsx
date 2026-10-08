@@ -1,21 +1,16 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Match, TournamentStage, TournamentOverview, Team } from '@/lib/types';
-import MatchCard from './MatchCard';
+import { Match, MatchParticipant, TournamentStage, TournamentOverview } from '@/lib/types';
 import {
   Trophy,
   Flame,
   Swords,
   ChevronRight,
-  Shield,
-  Sparkles,
-  Info,
   ArrowRight,
   CheckCircle2,
   GitBranch,
-  Crown,
-  Layers
+  Crown
 } from 'lucide-react';
 
 interface TournamentTreeGraphProps {
@@ -28,16 +23,17 @@ interface TournamentTreeGraphProps {
 interface TeamBoxData {
   id?: string;
   name: string;
-  robotName?: string;
   logoUrl?: string;
   score?: number | null;
   isWinner?: boolean;
   isBye?: boolean;
-  lives?: number;
   seed?: number;
   matchId?: string;
   status?: string;
   advancementSource?: string | null;
+  placeholderText?: string | null;
+  isEmptySlot?: boolean;
+  slotNumber?: number;
   rawMatch?: Match;
 }
 
@@ -114,35 +110,35 @@ export default function TournamentTreeGraph({
       let subtitle = '';
 
       if (st === 'ROUND_1') {
-        title = 'ROUND 1 (MAIN 2v2)';
-        subtitle = 'All teams play 2 by 2 • Winners advance • Losers to Wildcard';
+        title = 'ROUND 1';
+        subtitle = 'Winners advance · losers enter Wildcard';
       } else if (st === 'WILDCARD') {
-        title = 'ROUND 1 WILDCARD';
-        subtitle = '3-Way & 2-Way battles • 1 Winner advances • Losers eliminated';
+        title = 'WILDCARD ROUND 1';
+        subtitle = 'One winner advances · others are eliminated';
       } else if (st === 'QUARTERFINAL') {
-        title = 'QUARTERFINALS (MAIN 2v2)';
-        subtitle = 'Winners advance to Semis • Losers drop to QF Wildcard';
+        title = 'QUARTERFINALS';
+        subtitle = 'Winners advance · losers enter Wildcard';
       } else if (st === 'QUARTERFINAL_WILDCARD') {
-        title = 'QUARTERFINALS WILDCARD';
-        subtitle = 'WC R1 winners + QF losers • 1 Winner advances • Losers eliminated';
+        title = 'WILDCARD QUARTERFINALS';
+        subtitle = 'One winner advances from each match';
       } else if (st === 'SEMIFINAL') {
-        title = 'SEMIFINALS (MAIN 2v2)';
-        subtitle = 'Winners advance to Winners Final • Losers drop to Wildcard';
+        title = 'SEMIFINALS';
+        subtitle = 'Winners advance · losers enter Wildcard';
       } else if (st === 'SEMIFINAL_WILDCARD') {
-        title = 'SEMIFINALS WILDCARD';
-        subtitle = 'QF WC winners + SF losers • 1 Winner advances • Losers eliminated';
+        title = 'WILDCARD SEMIFINALS';
+        subtitle = 'One winner advances from each match';
       } else if (st === 'WINNERS_FINAL') {
-        title = 'WINNERS FINAL (MAIN 2v2)';
-        subtitle = 'Upper winning matches battle! • 1 Winner crowned Upper Champion';
+        title = 'MAIN BRACKET FINAL';
+        subtitle = 'Winner advances to the grand final';
       } else if (st === 'WILDCARD_SEMIFINAL') {
-        title = 'WILDCARD SEMIFINALS (3-WAY / 2-WAY)';
-        subtitle = 'Surviving contenders battle • Winners advance to Wildcard Decider';
+        title = 'WILDCARD SEMIFINALS';
+        subtitle = 'Surviving teams play for the final';
       } else if (st === 'WILDCARD_FINAL') {
-        title = 'WILDCARD FINAL (DECIDER MATCH)';
-        subtitle = 'Final Wildcard Duel! • 1 Winner crowned Wildcard Champion';
+        title = 'WILDCARD FINAL';
+        subtitle = 'Winner advances to the grand final';
       } else if (st === 'FINAL') {
-        title = 'GRAND FINALS (TITLE MATCH 2v2)';
-        subtitle = 'Upper Champion (Winners Winner) vs Wildcard Champion (Losers Winner)';
+        title = 'GRAND FINAL';
+        subtitle = 'Main bracket winner vs Wildcard winner';
       }
 
       const matchNodes: MatchPairNode[] = stageMatches.map((m) => {
@@ -151,56 +147,38 @@ export default function TournamentTreeGraph({
         const p2 = m.participants[1];
         const p3 = m.participants[2];
 
-        const topTeam: TeamBoxData = {
-          id: p1?.team?.id,
-          name: p1?.team?.name || p1?.placeholderText || 'TBD Team',
-          robotName: p1?.team?.robotName,
-          logoUrl: p1?.team?.logoUrl,
-          score: p1?.score,
-          isWinner: Boolean(p1?.isWinner),
-          isBye: isBye,
-          lives: p1?.team?.lives,
-          seed: p1?.team?.seed,
-          matchId: m.id,
-          status: m.status,
-          advancementSource: p1?.advancementSource,
-          rawMatch: m
-        };
+        const isThreeWay = Boolean(p3) || (m.participants.length >= 3);
 
-        let bottomTeam: TeamBoxData | undefined = undefined;
-        if (!isBye && p2) {
-          bottomTeam = {
-            id: p2?.team?.id,
-            name: p2?.team?.name || p2?.placeholderText || 'TBD Team',
-            robotName: p2?.team?.robotName,
-            logoUrl: p2?.team?.logoUrl,
-            score: p2?.score,
-            isWinner: Boolean(p2?.isWinner),
-            lives: p2?.team?.lives,
-            seed: p2?.team?.seed,
+        const makeTeamBox = (p: MatchParticipant | undefined, slotNumber: number): TeamBoxData => {
+          const isEmpty = !p || !p.team?.id;
+          return {
+            id: p?.team?.id,
+            name: p?.team?.name || '',
+            logoUrl: p?.team?.logoUrl,
+            score: p?.score,
+            isWinner: Boolean(p?.isWinner || (p?.teamId && m.winnerTeamId === p.teamId)),
+            isBye: isBye && slotNumber === 1,
+            seed: p?.team?.seed,
             matchId: m.id,
             status: m.status,
-            advancementSource: p2?.advancementSource,
+            advancementSource: p?.advancementSource,
+            placeholderText: undefined,
+            isEmptySlot: isEmpty,
+            slotNumber,
             rawMatch: m
           };
+        };
+
+        const topTeam: TeamBoxData = makeTeamBox(p1, 1);
+
+        let bottomTeam: TeamBoxData | undefined = undefined;
+        if (!isBye) {
+          bottomTeam = makeTeamBox(p2, 2);
         }
 
         let thirdTeam: TeamBoxData | undefined = undefined;
-        if (p3) {
-          thirdTeam = {
-            id: p3?.team?.id,
-            name: p3?.team?.name || p3?.placeholderText || 'TBD Team',
-            robotName: p3?.team?.robotName,
-            logoUrl: p3?.team?.logoUrl,
-            score: p3?.score,
-            isWinner: Boolean(p3?.isWinner),
-            lives: p3?.team?.lives,
-            seed: p3?.team?.seed,
-            matchId: m.id,
-            status: m.status,
-            advancementSource: p3?.advancementSource,
-            rawMatch: m
-          };
+        if (isThreeWay || p3) {
+          thirdTeam = makeTeamBox(p3, 3);
         }
 
         let winnerTeam: TeamBoxData | undefined = undefined;
@@ -208,10 +186,8 @@ export default function TournamentTreeGraph({
           winnerTeam = {
             id: m.winnerTeam.id,
             name: m.winnerTeam.name,
-            robotName: m.winnerTeam.robotName,
             logoUrl: m.winnerTeam.logoUrl,
             isWinner: true,
-            lives: m.winnerTeam.lives,
             matchId: m.id,
             status: m.status,
             rawMatch: m
@@ -233,6 +209,59 @@ export default function TournamentTreeGraph({
           rawMatch: m
         };
       });
+
+      // Older generated brackets placed seeded BYE teams directly into the
+      // quarterfinals. Surface those advances as opening-round BYE fixtures so
+      // the visual always contracts 8 → 4 → 2 → 1.
+      if (st === 'ROUND_1') {
+        const existingByeTeamIds = new Set(
+          stageMatches
+            .filter((match) => match.status === 'BYE')
+            .flatMap((match) => match.participants.map((participant) => participant.team?.id))
+            .filter(Boolean)
+        );
+        const directByeParticipants = (stageMap.get('QUARTERFINAL') || [])
+          .flatMap((match) => match.participants)
+          .filter((participant) =>
+            participant.advancementSource === 'ROUND_1_BYE'
+            && participant.team?.id
+            && !existingByeTeamIds.has(participant.team.id)
+          );
+
+        directByeParticipants.forEach((participant, index) => {
+          const team = participant.team!;
+          matchNodes.push({
+            matchId: `display-bye-${team.id}`,
+            matchNumber: stageMatches.length + index + 1,
+            stageType: 'ROUND_1',
+            stageName: title,
+            status: 'BYE',
+            topTeam: {
+              id: team.id,
+              name: team.name,
+              logoUrl: team.logoUrl,
+              seed: team.seed,
+              isWinner: true,
+              isBye: true,
+              status: 'BYE',
+            },
+            winnerTeam: {
+              id: team.id,
+              name: team.name,
+              logoUrl: team.logoUrl,
+              seed: team.seed,
+              isWinner: true,
+              isBye: true,
+              status: 'BYE',
+            },
+          });
+        });
+
+        const byeCount = matchNodes.filter((match) => match.status === 'BYE').length;
+        if (byeCount > 0) {
+          subtitle = `${matchNodes.length - byeCount} opening duels • ${byeCount} seeded ${byeCount === 1 ? 'bye' : 'byes'} • ${matchNodes.length} teams advance`;
+        }
+      }
 
       return {
         id: dbStage?.id || st,
@@ -273,34 +302,18 @@ export default function TournamentTreeGraph({
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
-      {/* ==================================================================== */}
-      {/* TOURNAMENT FLOW RULE BANNER                                         */}
-      {/* ==================================================================== */}
-      <div className="bg-gradient-to-r from-sky-950/40 via-slate-900/90 to-amber-950/30 border border-white/10 rounded-2xl p-4 sm:p-5 shadow-xl">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
-                Official Tournament Bracket Flow
-              </span>
-            </div>
-            <h3 className="text-base sm:text-lg font-black text-white">
-              Dual-Track Championship: Winners Bracket & Wildcard Bracket
-            </h3>
-            <p className="text-xs text-slate-400 max-w-2xl leading-relaxed">
-              Teams play <strong>2 by 2</strong> in the Main Bracket (winners advance; losers drop to Wildcard). Wildcard matches are <strong>3 by 3</strong> (and 2 by 2) where losers are eliminated and 1 winner advances. In the Grand Finals, the <strong>Winners Bracket Champion</strong> and <strong>Wildcard Bracket Champion</strong> battle for the crown!
-            </p>
+    <div className="space-y-4 animate-in fade-in duration-200 sm:space-y-5">
+      <div className="flex items-center justify-between gap-3 overflow-x-auto border-y border-white/[0.08] bg-[#080c13] px-2 py-2">
+          <div className="hidden items-center gap-2 px-1 text-xs font-semibold text-slate-500 md:flex">
+            <GitBranch className="h-4 w-4 text-blue-400" />
+            <span>Bracket view</span>
           </div>
-
-          {/* Track Filter Switcher */}
-          <div className="flex items-center gap-1.5 p-1 bg-slate-950/80 rounded-xl border border-white/10 shrink-0">
+          <div className="flex min-w-max flex-1 items-center gap-1 sm:flex-none">
             <button
               onClick={() => setTrackFilter('ALL')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              className={`min-h-9 flex-1 rounded-lg px-3 text-xs font-bold transition-all sm:flex-none ${
                 trackFilter === 'ALL'
-                  ? 'bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-md'
+                  ? 'bg-blue-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -308,58 +321,57 @@ export default function TournamentTreeGraph({
             </button>
             <button
               onClick={() => setTrackFilter('WINNERS')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              className={`min-h-9 flex-1 rounded-lg px-3 text-xs font-bold transition-all sm:flex-none ${
                 trackFilter === 'WINNERS'
-                  ? 'bg-sky-600 text-white shadow-md'
+                  ? 'bg-blue-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              Winners (2v2)
+              Main bracket
             </button>
             <button
               onClick={() => setTrackFilter('WILDCARD')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              className={`min-h-9 flex-1 rounded-lg px-3 text-xs font-bold transition-all sm:flex-none ${
                 trackFilter === 'WILDCARD'
-                  ? 'bg-amber-600 text-white shadow-md'
+                  ? 'bg-blue-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              Wildcard (3v3 / 2v2)
+              Wildcard
             </button>
           </div>
-        </div>
       </div>
 
       {/* ==================================================================== */}
       {/* 1. UPPER TRACK: WINNERS BRACKET (2 by 2)                             */}
       {/* ==================================================================== */}
       {(trackFilter === 'ALL' || trackFilter === 'WINNERS') && winnersStages.length > 0 && (
-        <div className="bg-[#0b101d] border border-sky-500/20 rounded-3xl p-5 sm:p-7 shadow-2xl relative overflow-hidden">
-          <div className="flex items-center justify-between pb-3 mb-6 border-b border-sky-500/20">
+        <section className="relative overflow-hidden rounded-2xl border border-white/[0.09] bg-[#0a0f18] shadow-[0_18px_60px_rgba(0,0,0,0.26)]">
+          <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-4 sm:px-6">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-500/30 flex items-center justify-center">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-blue-500/25 bg-blue-500/10 text-blue-400">
                 <Swords className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-base font-black text-white uppercase tracking-wider flex items-center gap-2">
-                  <span>WINNERS BRACKET (MAIN TOURNAMENT)</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-400 font-mono">
-                    2 by 2 Duels
-                  </span>
+                <h3 className="flex items-center gap-2 text-sm font-extrabold tracking-wide text-white sm:text-base">
+                  <span>Main bracket</span>
+                  <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-blue-400">1v1</span>
                 </h3>
-                <p className="text-xs text-slate-400">
-                  Winners advance to next round • Losers drop down to the Wildcard Bracket
+                <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+                  Winners advance · losing teams enter Wildcard
                 </p>
               </div>
             </div>
 
-            <div className="hidden sm:flex items-center gap-2 text-xs text-sky-400/80 font-mono">
-              <span>Path to Grand Finals ──▶</span>
+            <div className="hidden items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-slate-600 sm:flex">
+              <span>{winnersStages.length} rounds</span>
+              <ArrowRight className="h-3.5 w-3.5 text-blue-500" />
             </div>
           </div>
 
-          <div className="w-full overflow-x-auto pb-4 scrollbar-none">
-            <div className="flex items-stretch min-w-max py-2 px-1">
+          <div className="px-3 pt-3 text-[10px] font-medium text-slate-600 sm:hidden">Swipe to follow each round →</div>
+          <div className="scrollbar-none w-full snap-x snap-mandatory overflow-x-auto px-3 pb-4 sm:px-5">
+            <div className="flex min-w-max items-stretch py-2">
               {winnersStages.map((col, colIdx) => (
                 <React.Fragment key={col.id}>
                   <StageTreeColumn
@@ -380,39 +392,39 @@ export default function TournamentTreeGraph({
               ))}
             </div>
           </div>
-        </div>
+        </section>
       )}
 
       {/* ==================================================================== */}
       {/* 2. LOWER TRACK: WILDCARD BRACKET (3-Way & 2-Way Survival)            */}
       {/* ==================================================================== */}
       {(trackFilter === 'ALL' || trackFilter === 'WILDCARD') && wildcardStages.length > 0 && (
-        <div className="bg-[#120f20] border border-amber-500/20 rounded-3xl p-5 sm:p-7 shadow-2xl relative overflow-hidden">
-          <div className="flex items-center justify-between pb-3 mb-6 border-b border-amber-500/20">
+        <section className="relative overflow-hidden rounded-2xl border border-white/[0.09] bg-[#090e17] shadow-[0_18px_60px_rgba(0,0,0,0.24)]">
+          <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-4 sm:px-6">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-blue-500/25 bg-blue-500/10 text-blue-400">
                 <Flame className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-base font-black text-white uppercase tracking-wider flex items-center gap-2">
-                  <span>WILDCARD BRACKET (SECOND-CHANCE SURVIVAL)</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-mono">
-                    3 by 3 & 2 by 2
-                  </span>
+                <h3 className="flex items-center gap-2 text-sm font-extrabold tracking-wide text-white sm:text-base">
+                  <span>Wildcard bracket</span>
+                  <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-blue-400">Elimination</span>
                 </h3>
-                <p className="text-xs text-slate-400">
-                  1 Winner advances to next Wildcard round • Losers exit the tournament (eliminated)
+                <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+                  One winner advances · remaining teams are eliminated
                 </p>
               </div>
             </div>
 
-            <div className="hidden sm:flex items-center gap-2 text-xs text-amber-400/80 font-mono">
-              <span>Winner battles for Crown ──▶</span>
+            <div className="hidden items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-slate-600 sm:flex">
+              <span>{wildcardStages.length} rounds</span>
+              <ArrowRight className="h-3.5 w-3.5 text-blue-500" />
             </div>
           </div>
 
-          <div className="w-full overflow-x-auto pb-4 scrollbar-none">
-            <div className="flex items-stretch min-w-max py-2 px-1">
+          <div className="px-3 pt-3 text-[10px] font-medium text-slate-600 sm:hidden">Swipe to follow each round →</div>
+          <div className="scrollbar-none w-full snap-x snap-mandatory overflow-x-auto px-3 pb-4 sm:px-5">
+            <div className="flex min-w-max items-stretch py-2">
               {wildcardStages.map((col, colIdx) => (
                 <React.Fragment key={col.id}>
                   <StageTreeColumn
@@ -433,32 +445,33 @@ export default function TournamentTreeGraph({
               ))}
             </div>
           </div>
-        </div>
+        </section>
       )}
 
       {/* ==================================================================== */}
       {/* 3. APEX SHOWDOWN: GRAND FINALS                                       */}
       {/* ==================================================================== */}
       {(trackFilter === 'ALL' || finalStage) && (
-        <div className="bg-gradient-to-br from-[#161224] via-[#0d0a17] to-[#120d20] border-2 border-amber-500/40 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
-          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-6">
-            <div className="space-y-2 max-w-xl">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                <Crown className="w-4 h-4 text-amber-400" />
-                <span>ULTIMATE TOURNAMENT SHOWDOWN</span>
+        <section className="relative overflow-hidden rounded-2xl border border-blue-500/30 bg-[#090f1a] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.28)] sm:p-7">
+          <div className="absolute inset-y-0 left-0 w-1 bg-blue-500" aria-hidden="true" />
+          <div className="flex flex-col items-stretch justify-between gap-6 lg:flex-row lg:items-center">
+            <div className="max-w-xl space-y-2">
+              <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-blue-400">
+                <Crown className="w-4 h-4 text-blue-400" />
+                <span>Championship match</span>
               </div>
-              <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                GRAND FINALS CHAMPIONSHIP
+              <h2 className="text-2xl font-black tracking-tight text-white sm:text-3xl">
+                Grand final
               </h2>
-              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                The apex battle: The undefeated <strong>Winners Bracket Champion</strong> takes on the <strong>Wildcard Bracket Champion</strong>. 1v1 duel to crown the overall tournament champion!
+              <p className="text-xs leading-relaxed text-slate-400 sm:text-sm">
+                Main bracket winner versus Wildcard winner. One final match decides the champion.
               </p>
             </div>
 
             {/* Finals Match Card or Champion Plinth */}
             <div className="flex flex-col sm:flex-row items-center gap-4 shrink-0">
               {finalStage && finalStage.matches.length > 0 ? (
-                <div className="w-[300px]">
+                <div className="w-full sm:w-[300px]">
                   <BracketMatchBlock
                     match={finalStage.matches[0]}
                     isWildcard={false}
@@ -469,8 +482,8 @@ export default function TournamentTreeGraph({
                   />
                 </div>
               ) : (
-                <div className="p-6 rounded-2xl border border-dashed border-amber-500/30 bg-amber-950/10 text-center w-[280px]">
-                  <Crown className="w-8 h-8 text-amber-400 mx-auto mb-2 opacity-80" />
+                <div className="w-full border border-dashed border-blue-500/30 bg-blue-950/10 p-6 text-center sm:w-[280px]">
+                  <Crown className="w-8 h-8 text-blue-400 mx-auto mb-2 opacity-80" />
                   <h4 className="text-xs font-bold text-white uppercase">Awaiting Finalists</h4>
                   <p className="text-[11px] text-slate-400 mt-1">
                     Winners Bracket Winner vs Wildcard Winner will battle here for the crown.
@@ -479,26 +492,21 @@ export default function TournamentTreeGraph({
               )}
 
               {overview?.champion && (
-                <div className="w-[240px] flex flex-col justify-center rounded-2xl p-5 border-2 border-amber-400 bg-gradient-to-b from-[#221a36] to-[#0f0b18] text-center shadow-2xl shadow-amber-500/20">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-yellow-500 text-black flex items-center justify-center mx-auto mb-2 shadow-lg shadow-amber-500/30">
+                <div className="flex w-full flex-col justify-center border border-blue-400 bg-[#0b1220] p-5 text-center shadow-xl shadow-blue-500/10 sm:w-[240px]">
+                  <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-500 text-white shadow-lg shadow-blue-500/20">
                     <Trophy className="w-6 h-6 stroke-[2.5]" />
                   </div>
-                  <span className="text-[10px] font-extrabold tracking-widest text-amber-400 uppercase">
+                  <span className="text-[10px] font-extrabold tracking-widest text-blue-400 uppercase">
                     TOURNAMENT CHAMPION
                   </span>
                   <h3 className="text-lg font-black text-white mt-1">
                     {overview.champion.name}
                   </h3>
-                  {overview.champion.robotName && (
-                    <span className="text-xs text-amber-200/90 font-medium mt-0.5">
-                      Bot: {overview.champion.robotName}
-                    </span>
-                  )}
                 </div>
               )}
             </div>
           </div>
-        </div>
+        </section>
       )}
     </div>
   );
@@ -524,23 +532,23 @@ function StageTreeColumn({
   const isWildcard = col.isWildcard;
 
   return (
-    <div className="w-[280px] sm:w-[305px] flex flex-col shrink-0">
+    <div className="flex w-[calc(100vw-6rem)] max-w-[300px] shrink-0 snap-start flex-col sm:w-[305px]">
       {/* Stage Header Card */}
       <div
-        className={`h-[72px] shrink-0 p-3 rounded-2xl border mb-3 flex items-center justify-between shadow-lg ${
+        className={`mb-3 flex h-[68px] shrink-0 items-center justify-between border-l-2 border-y border-r p-3 ${
           isWildcard
-            ? 'bg-[#181329]/95 border-amber-500/30 shadow-amber-950/20'
-            : 'bg-[#0e1628]/95 border-sky-500/20 shadow-sky-950/20'
+            ? 'border-blue-500/35 bg-[#0b111c]'
+            : 'border-blue-500/30 bg-[#0c121e]'
         }`}
       >
         <div className="min-w-0 pr-2">
           <div className="flex items-center gap-1.5">
             {isWildcard ? (
-              <Flame className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <Flame className="w-3.5 h-3.5 text-blue-400 shrink-0" />
             ) : (
-              <Swords className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+              <Swords className="w-3.5 h-3.5 text-blue-400 shrink-0" />
             )}
-            <h3 className="font-black text-xs text-white uppercase tracking-wider truncate">
+            <h3 className="truncate text-[11px] font-extrabold uppercase tracking-[0.08em] text-white sm:text-xs">
               {col.title}
             </h3>
           </div>
@@ -550,10 +558,10 @@ function StageTreeColumn({
         </div>
 
         <span
-          className={`text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+          className={`shrink-0 text-[8px] font-bold uppercase tracking-wider ${
             col.isCompleted
-              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-              : 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
+              ? 'text-blue-400'
+              : 'text-blue-300'
           }`}
         >
           {col.isCompleted ? 'COMPLETED' : 'ACTIVE'}
@@ -565,7 +573,7 @@ function StageTreeColumn({
         {col.matches.map((m) => (
           <div
             key={m.matchId}
-            className="flex-1 flex flex-col justify-center items-stretch py-2 w-full min-h-[140px]"
+            className="flex min-h-[132px] w-full flex-1 flex-col items-stretch justify-center py-2"
           >
             <BracketMatchBlock
               match={m}
@@ -622,7 +630,7 @@ function WinnersTreeConnector({
                   vectorEffect="non-scaling-stroke"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className={isCompleted ? 'text-sky-500/60' : 'text-sky-500/40'}
+                  className={isCompleted ? 'text-blue-500/60' : 'text-blue-500/40'}
                 />
                 {/* Center branch leaving at Y=50% */}
                 <path
@@ -631,11 +639,11 @@ function WinnersTreeConnector({
                   strokeWidth="2.5"
                   vectorEffect="non-scaling-stroke"
                   strokeLinecap="round"
-                  className={isCompleted ? 'text-sky-400' : 'text-sky-400/80'}
+                  className={isCompleted ? 'text-blue-400' : 'text-blue-400/80'}
                 />
               </svg>
               {/* Arrowhead centered at Y=50% right edge */}
-              <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1 pointer-events-none text-sky-400">
+              <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1 pointer-events-none text-blue-400">
                 <ChevronRight className="w-3.5 h-3.5" />
               </div>
             </div>
@@ -645,8 +653,8 @@ function WinnersTreeConnector({
           Array.from({ length: Math.min(prevMatchesCount, nextMatchesCount) }).map((_, idx) => (
             <div key={idx} className="flex-1 relative w-full flex items-center justify-center">
               <div className="w-full flex items-center">
-                <span className="w-full h-[2px] bg-sky-500/40" />
-                <ChevronRight className="w-3.5 h-3.5 text-sky-400 -ml-1 flex-shrink-0" />
+                <span className="w-full h-[2px] bg-blue-500/40" />
+                <ChevronRight className="w-3.5 h-3.5 text-blue-400 -ml-1 flex-shrink-0" />
               </div>
             </div>
           ))
@@ -695,7 +703,7 @@ function WildcardTreeConnector({
                   vectorEffect="non-scaling-stroke"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className={isCompleted ? 'text-amber-500/60' : 'text-amber-500/40'}
+                  className={isCompleted ? 'text-blue-500/60' : 'text-blue-500/40'}
                 />
                 <path
                   d="M 24 50 H 42"
@@ -703,10 +711,10 @@ function WildcardTreeConnector({
                   strokeWidth="2.5"
                   vectorEffect="non-scaling-stroke"
                   strokeLinecap="round"
-                  className={isCompleted ? 'text-amber-400' : 'text-amber-400/80'}
+                  className={isCompleted ? 'text-blue-400' : 'text-blue-400/80'}
                 />
               </svg>
-              <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1 pointer-events-none text-amber-400">
+              <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1 pointer-events-none text-blue-400">
                 <ChevronRight className="w-3.5 h-3.5" />
               </div>
             </div>
@@ -716,8 +724,8 @@ function WildcardTreeConnector({
           Array.from({ length: Math.min(prevMatchesCount, nextMatchesCount) }).map((_, idx) => (
             <div key={idx} className="flex-1 relative w-full flex items-center justify-center">
               <div className="w-full flex items-center">
-                <span className="w-full h-[2px] bg-amber-500/40" />
-                <ChevronRight className="w-3.5 h-3.5 text-amber-400 -ml-1 flex-shrink-0" />
+                <span className="w-full h-[2px] bg-blue-500/40" />
+                <ChevronRight className="w-3.5 h-3.5 text-blue-400 -ml-1 flex-shrink-0" />
               </div>
             </div>
           ))
@@ -757,44 +765,47 @@ function BracketMatchBlock({
   return (
     <div
       onClick={onClick}
-      className={`rounded-xl border p-2.5 transition-all duration-150 cursor-pointer overflow-hidden ${
+      className={`overflow-hidden rounded-lg border p-2.5 transition duration-150 ${match.rawMatch ? 'cursor-pointer' : 'cursor-default'} ${
         isLive
-          ? 'bg-[#151d32] border-rose-500/70 shadow-md shadow-rose-500/20'
+          ? 'border-red-500/80 bg-[#1f090e] shadow-[0_0_0_1px_rgba(239,68,68,0.25),0_12px_30px_rgba(239,68,68,0.18)]'
           : isFinal
-          ? 'bg-[#1c152e] border-amber-500/50 hover:border-amber-400'
+          ? 'bg-[#0b1220] border-blue-500/50 hover:border-blue-400'
           : isCompleted
-          ? 'bg-[#0f172a]/90 border-slate-700/60 hover:border-slate-500'
+          ? 'border-slate-700/60 bg-[#0c131f] hover:border-slate-500'
           : isBye
-          ? 'bg-[#161226]/90 border-purple-500/40'
+          ? 'border-blue-500/35 bg-[#0a1220]'
           : isWildcard
-          ? 'bg-[#1a1528]/90 border-amber-500/30 hover:border-amber-400'
-          : 'bg-[#0e1628]/90 border-sky-500/20 hover:border-sky-500/50'
+          ? 'border-blue-500/25 bg-[#0b121e] hover:border-blue-400/70'
+          : 'border-white/[0.09] bg-[#0d1420] hover:border-blue-500/45'
       }`}
     >
       {/* Match Number & Status */}
       <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-white/5 text-[10px] text-slate-400">
         <span className="font-mono font-bold text-slate-300">
-          {isFinal ? '🏆 GRAND FINAL' : `Match #${match.matchNumber}`}
+          {isFinal ? 'GRAND FINAL' : `Match ${String(match.matchNumber).padStart(2, '0')}`}
         </span>
         <div>
           {isLive && (
-            <span className="px-1.5 py-0.2 rounded-full font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+            <span className="flex items-center gap-1.5 font-black text-[10px] tracking-wider text-red-400 bg-red-500/20 px-2 py-0.5 rounded-full border border-red-500/40">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500" />
+              </span>
               LIVE
             </span>
           )}
           {isCompleted && (
-            <span className="px-1.5 py-0.2 rounded font-bold bg-emerald-500/10 text-emerald-400">
+            <span className="font-bold text-blue-400">
               FINAL
             </span>
           )}
           {isBye && (
-            <span className="px-1.5 py-0.2 rounded font-bold bg-purple-500/20 text-purple-300">
-              BYE ADVANCE
+            <span className="font-bold text-blue-300">
+              BYE
             </span>
           )}
           {!isLive && !isCompleted && !isBye && (
-            <span className="px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">
+            <span className="font-mono text-[9px] text-slate-500">
               SCHEDULED
             </span>
           )}
@@ -808,9 +819,10 @@ function BracketMatchBlock({
             team={t1}
             isHovered={hoveredTeamName === t1.name}
             onHover={onHoverTeam}
+            isWildcardTrack={isWildcard}
           />
-          <div className="flex items-center justify-end px-2 pt-1 text-[10px] font-mono text-purple-400">
-            <span>────────▶ Advances to Next Round</span>
+          <div className="flex items-center justify-end gap-1 px-2 pt-1 text-[9px] font-bold uppercase tracking-wider text-blue-400">
+            <span>Advances</span><ArrowRight className="h-3 w-3" />
           </div>
         </div>
       ) : (
@@ -819,22 +831,21 @@ function BracketMatchBlock({
             team={t1}
             isHovered={hoveredTeamName === t1.name}
             onHover={onHoverTeam}
-            badge={isFinal ? 'Winners Champion' : undefined}
+            badge={isFinal && !t1.isEmptySlot ? 'Winners Champion' : undefined}
+            isWildcardTrack={isWildcard}
           />
 
           {/* Bracket Branch between combatants */}
           <div className="flex items-center justify-between px-2 text-[9px] font-mono text-slate-500">
             <span>VS</span>
-            <span className="text-slate-400 flex items-center">
-              <span>├──▶</span>
-              {match.winnerTeam ? (
-                <span className="text-emerald-400 font-bold ml-1 truncate max-w-[110px]">
+            {match.winnerTeam && (
+              <span className="text-slate-400 flex items-center">
+                <span>├──▶</span>
+                <span className={`${isWildcard ? 'text-white' : 'text-emerald-400'} ml-1 max-w-[110px] truncate font-bold`}>
                   {match.winnerTeam.name}
                 </span>
-              ) : (
-                <span className="text-slate-500 ml-1">Winner advances</span>
-              )}
-            </span>
+              </span>
+            )}
           </div>
 
           {t2 && (
@@ -842,29 +853,30 @@ function BracketMatchBlock({
               team={t2}
               isHovered={hoveredTeamName === t2.name}
               onHover={onHoverTeam}
-              badge={isFinal ? 'Wildcard Champion' : undefined}
+              badge={isFinal && !t2.isEmptySlot ? 'Wildcard Champion' : undefined}
+              isWildcardTrack={isWildcard}
             />
           )}
 
           {t3 && (
             <>
-              <div className="flex items-center justify-between px-2 text-[9px] font-mono text-amber-500/70">
+              <div className="flex items-center justify-between px-2 text-[9px] font-mono text-blue-500/70">
                 <span>3-WAY</span>
-                <span>├──▶ 1 Winner survives</span>
               </div>
               <TeamPill
                 team={t3}
                 isHovered={hoveredTeamName === t3.name}
                 onHover={onHoverTeam}
+                isWildcardTrack={isWildcard}
               />
             </>
           )}
 
           {/* Flow destination indicator */}
           {!isWildcard && !isFinal && (
-            <div className="mt-1 pt-1 border-t border-white/5 text-[9px] text-sky-400/80 flex items-center justify-between">
+            <div className="mt-1 pt-1 border-t border-white/5 text-[9px] text-blue-400/80 flex items-center justify-between">
               <span>Loser:</span>
-              <span className="text-amber-400 font-bold flex items-center gap-1">
+              <span className="text-blue-400 font-bold flex items-center gap-1">
                 <span>Drops to Wildcard</span>
                 <ArrowRight className="w-2.5 h-2.5" />
               </span>
@@ -872,18 +884,18 @@ function BracketMatchBlock({
           )}
 
           {isWildcard && (
-            <div className="mt-1 pt-1 border-t border-white/5 text-[9px] text-amber-400/90 flex items-center justify-between">
+            <div className="mt-1 pt-1 border-t border-white/5 text-[9px] text-blue-400/90 flex items-center justify-between">
               <span>Losers:</span>
-              <span className="text-rose-400 font-bold">
+              <span className="text-blue-400 font-bold">
                 Eliminated (Out)
               </span>
             </div>
           )}
 
           {isFinal && (
-            <div className="mt-1 pt-1 border-t border-amber-500/20 text-[9px] text-amber-300 font-bold flex items-center justify-between">
+            <div className="mt-1 pt-1 border-t border-blue-500/20 text-[9px] text-blue-300 font-bold flex items-center justify-between">
               <span>Duel for the Trophy</span>
-              <span>Winner = Champion 👑</span>
+              <span>Winner becomes champion</span>
             </div>
           )}
         </div>
@@ -900,25 +912,50 @@ function TeamPill({
   team,
   isHovered,
   onHover,
-  badge
+  badge,
+  isWildcardTrack = false
 }: {
   team: TeamBoxData;
   isHovered: boolean;
   onHover: (name: string | null) => void;
   badge?: string;
+  isWildcardTrack?: boolean;
 }) {
+  const isEmpty = team.isEmptySlot || !team.id;
   const isWinner = team.isWinner;
+  const hasFinalResult = team.status === 'COMPLETED' || team.status === 'BYE';
+  const resultTextColor = hasFinalResult
+    ? isWildcardTrack
+      ? isWinner
+        ? 'text-white'
+        : 'text-red-400'
+      : isWinner
+        ? 'text-emerald-400'
+        : 'text-white'
+    : 'text-slate-300';
+
+  if (isEmpty) {
+    return (
+      <div
+        className={`h-8 rounded-md border border-dashed transition-all select-none ${
+          isWildcardTrack
+            ? 'bg-blue-950/15 border-blue-500/25'
+            : 'bg-slate-950/30 border-white/10'
+        }`}
+      />
+    );
+  }
 
   return (
     <div
       onMouseEnter={() => onHover(team.name)}
       onMouseLeave={() => onHover(null)}
-      className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border transition-all text-xs ${
+      className={`flex items-center justify-between rounded-md border px-2.5 py-1.5 text-xs transition-all ${
         isHovered
-          ? 'bg-sky-500/20 border-sky-400 ring-1 ring-sky-400/50'
+          ? 'border-blue-400 bg-blue-500/15 ring-1 ring-blue-400/30'
           : isWinner
-          ? 'bg-emerald-950/40 border-emerald-500/50 text-white font-bold'
-          : 'bg-slate-900/60 border-white/5 text-slate-300 hover:border-white/20'
+          ? 'border-blue-500/45 bg-blue-950/35 font-bold text-white'
+          : 'border-white/[0.06] bg-black/20 text-slate-300 hover:border-white/20'
       }`}
     >
       <div className="flex items-center gap-2 truncate">
@@ -937,30 +974,27 @@ function TeamPill({
           </span>
         ) : null}
         <div className="truncate">
-          <span className="block truncate font-semibold">
-            {team.name}
-          </span>
-          {badge && (
-            <span className="text-[9px] font-mono text-amber-400 block -mt-0.5">
-              {badge}
+          <div className="flex items-center gap-1.5 truncate">
+            <span className={`block truncate font-semibold ${resultTextColor}`}>
+              {team.name}
             </span>
-          )}
-          {team.robotName && !badge && (
-            <span className="text-[9px] text-slate-400 block -mt-0.5">
-              {team.robotName}
+          </div>
+          {badge && (
+            <span className="text-[9px] font-mono text-blue-400 block -mt-0.5">
+              {badge}
             </span>
           )}
         </div>
       </div>
 
       <div className="flex items-center gap-1.5 shrink-0 ml-2">
-        {team.score !== null && team.score !== undefined && (
-          <span className="font-mono text-xs font-bold px-1.5 py-0.5 rounded bg-black/40 text-white">
+        {typeof team.score === 'number' && team.score !== 0 && (
+          <span className="rounded bg-black/40 px-1.5 py-0.5 font-mono text-xs font-bold text-white">
             {team.score}
           </span>
         )}
         {isWinner && (
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+          <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" />
         )}
       </div>
     </div>

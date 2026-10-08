@@ -2,27 +2,125 @@
 
 @layer base {
   :root {
-    --bg-main: #090d16;
-    --bg-card: rgba(17, 24, 39, 0.85);
-    --bg-card-hover: rgba(30, 41, 59, 0.9);
-    --border-color: rgba(255, 255, 255, 0.1);
-    --border-highlight: rgba(56, 189, 248, 0.3);
-    --accent-blue: #38bdf8;
-    --accent-red: #f43f5e;
-    --accent-gold: #f59e0b;
-    --accent-emerald: #10b981;
+    --bg-main: #070a10;
+    --bg-elevated: #0c111b;
+    --bg-card: rgba(14, 20, 32, 0.86);
+    --bg-card-hover: rgba(20, 29, 45, 0.94);
+    --border-color: rgba(148, 163, 184, 0.14);
+    --border-highlight: rgba(59, 130, 246, 0.38);
+    --accent-blue: #2563eb;
+    --accent-red: #3b82f6;
+    --accent-gold: #2563eb;
+    --accent-emerald: #1d4ed8;
     --text-primary: #f8fafc;
-    --text-secondary: #94a3b8;
+    --text-secondary: #a8b4c5;
     --text-muted: #64748b;
+    --shadow-panel: 0 24px 80px rgba(0, 0, 0, 0.28);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    background: var(--bg-main);
+    scroll-behavior: smooth;
   }
 
   body {
     background-color: var(--bg-main);
     color: var(--text-primary);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     overflow-x: hidden;
     min-height: 100vh;
+    line-height: 1.5;
+    text-rendering: optimizeLegibility;
   }
+
+  ::selection {
+    background: rgba(37, 99, 235, 0.38);
+    color: #fff;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button,
+  [role="button"] {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
+  :focus-visible {
+    outline: 2px solid #60a5fa;
+    outline-offset: 3px;
+  }
+
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+}
+
+.site-shell {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  background:
+    radial-gradient(circle at 12% -8%, rgba(37, 99, 235, 0.16), transparent 30rem),
+    radial-gradient(circle at 88% 8%, rgba(29, 78, 216, 0.1), transparent 32rem),
+    linear-gradient(180deg, #05070c 0%, #070a10 52%, #05070c 100%);
+}
+
+.site-shell::before {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  content: "";
+  opacity: 0.22;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.035) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(to bottom, black, transparent 72%);
+}
+
+.skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 100;
+  transform: translateY(-160%);
+  border-radius: 0.75rem;
+  background: #fff;
+  color: #071018;
+  padding: 0.65rem 0.9rem;
+  font-size: 0.8125rem;
+  font-weight: 750;
+  transition: transform 160ms ease;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
 }
 
 /* Custom scrollbars for bracket and tables */
@@ -32,12 +130,12 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.6);
+  background: rgba(7, 10, 16, 0.65);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(71, 85, 105, 0.6);
+  background: rgba(100, 116, 139, 0.52);
   border-radius: 4px;
 }
 
@@ -47,10 +145,11 @@
 
 /* Glassmorphism panel */
 .glass-panel {
-  background: rgba(15, 23, 42, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(12, 17, 27, 0.78);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-panel);
 }
 
 .glass-panel-hover {
@@ -58,21 +157,21 @@
 }
 .glass-panel-hover:hover {
   background: rgba(30, 41, 59, 0.85);
-  border-color: rgba(56, 189, 248, 0.3);
+  border-color: rgba(59, 130, 246, 0.35);
   transform: translateY(-1px);
 }
 
 /* Badge glows */
 .glow-blue {
-  box-shadow: 0 0 15px rgba(56, 189, 248, 0.2);
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
 }
 
 .glow-red {
-  box-shadow: 0 0 15px rgba(244, 63, 94, 0.2);
+  box-shadow: 0 0 15px rgba(37, 99, 235, 0.2);
 }
 
 .glow-gold {
-  box-shadow: 0 0 20px rgba(245, 158, 11, 0.25);
+  box-shadow: 0 0 20px rgba(29, 78, 216, 0.25);
 }
 
 /* Pulse animation for live match */
@@ -87,20 +186,111 @@
   }
 }
 
+@keyframes hero-robot-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(-4rem, 0, 0) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.hero-robot-enter {
+  animation: hero-robot-enter 800ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 .animate-live-pulse {
   animation: live-pulse 2s infinite ease-in-out;
 }
 
 /* Bracket connectors */
 .bracket-connector-solid {
-  stroke: #38bdf8;
+  stroke: #3b82f6;
   stroke-width: 2;
   fill: none;
 }
 
 .bracket-connector-wildcard {
-  stroke: #f59e0b;
+  stroke: #2563eb;
   stroke-width: 2;
   stroke-dasharray: 4 3;
   fill: none;
+}
+
+/* Shared refinements for the data-heavy tournament UI. */
+.font-mono {
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Industrial blue/black surface geometry used across public and admin views. */
+.site-shell main .rounded-3xl {
+  border-radius: 1rem;
+}
+
+.site-shell main .rounded-2xl {
+  border-radius: 0.75rem;
+}
+
+.site-shell main .rounded-xl {
+  border-radius: 0.625rem;
+}
+
+.site-shell main input,
+.site-shell main select,
+.site-shell main textarea {
+  border-color: rgba(59, 130, 246, 0.16);
+  background-color: rgba(5, 9, 17, 0.9);
+}
+
+.site-shell main input:focus,
+.site-shell main select:focus,
+.site-shell main textarea:focus {
+  border-color: rgba(96, 165, 250, 0.7);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .site-shell::before {
+    background-size: 32px 32px;
+  }
+
+  button,
+  a[class*="rounded"] {
+    min-height: 2.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  .site-shell,
+  body {
+    background: #fff !important;
+    color: #111827 !important;
+  }
+
+  header,
+  footer,
+  .skip-link {
+    display: none !important;
+  }
 }

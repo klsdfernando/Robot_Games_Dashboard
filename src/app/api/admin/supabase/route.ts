@@ -60,8 +60,8 @@ export async function POST(req: NextRequest) {
       const client = (await import('@/lib/supabase')).getSupabaseAdminClient();
       if (client) {
         const categories = [
-          { id: 'c0000000-0000-0000-0000-000000000001', name: 'HEAVYWEIGHT', display_name: 'Heavyweight Division', description: '60kg combat robots' },
-          { id: 'c0000000-0000-0000-0000-000000000002', name: 'LIGHTWEIGHT', display_name: 'Lightweight Division', description: '15kg combat robots' },
+          { id: 'c0000000-0000-0000-0000-000000000001', name: 'HEAVYWEIGHT', display_name: 'Heavyweight Division', description: '20kg combat robots' },
+          { id: 'c0000000-0000-0000-0000-000000000002', name: 'LIGHTWEIGHT', display_name: 'Lightweight Division', description: '3kg combat robots' },
           { id: 'c0000000-0000-0000-0000-000000000003', name: 'RACE_SCHOOL', display_name: 'School Category', description: 'Robot Race School Category' },
           { id: 'c0000000-0000-0000-0000-000000000004', name: 'RACE_UNIVERSITY', display_name: 'University Category', description: 'Robot Race University Category' }
         ];

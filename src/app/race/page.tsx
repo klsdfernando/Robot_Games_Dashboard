@@ -1,25 +1,19 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import Link from 'next/link';
+import Image from 'next/image';
 import { 
   Flag, 
   Timer, 
   Clock, 
-  Play, 
-  CheckCircle2, 
   Search, 
   Printer, 
-  Award, 
   AlertCircle, 
   Check, 
   Loader2, 
   Trophy,
   Medal,
-  Calendar,
-  Lock,
-  ExternalLink,
-  ShieldAlert
+  Calendar
 } from 'lucide-react';
 import { RaceScheduleSlot } from '@/lib/types';
 
@@ -61,15 +55,15 @@ export default function RobotRacePublicPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load race schedule');
       setSchedule(data.schedule || []);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load race schedule');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchSchedule();
+    void Promise.resolve().then(fetchSchedule);
   }, []);
 
   // Time Schedule: Filtered list (strictly departure times and teams)
@@ -77,7 +71,6 @@ export default function RobotRacePublicPage() {
     return schedule.filter(slot => {
       const matchesSearch = 
         slot.teamName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (slot.robotName && slot.robotName.toLowerCase().includes(searchQuery.toLowerCase())) ||
         (slot.organization && slot.organization.toLowerCase().includes(searchQuery.toLowerCase())) ||
         slot.scheduledTime.toLowerCase().includes(searchQuery.toLowerCase());
 
@@ -106,7 +99,6 @@ export default function RobotRacePublicPage() {
     const valid = schedule.filter(s => {
       const matchesSearch = 
         s.teamName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (s.robotName && s.robotName.toLowerCase().includes(searchQuery.toLowerCase())) ||
         (s.organization && s.organization.toLowerCase().includes(searchQuery.toLowerCase()));
 
       const matchesDivision = divisionFilter === 'ALL' || s.categoryDivision === divisionFilter;
@@ -130,7 +122,7 @@ export default function RobotRacePublicPage() {
 
       return a.slotNumber - b.slotNumber;
     });
-  }, [schedule, searchQuery]);
+  }, [schedule, searchQuery, divisionFilter]);
 
   // Fastest leader time for delta calculation
   const leaderSeconds = useMemo(() => {
@@ -165,21 +157,21 @@ export default function RobotRacePublicPage() {
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* Hero Header */}
-      <div className="relative overflow-hidden rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-[#071714] via-[#091018] to-[#0d1618] p-6 sm:p-8 shadow-2xl shadow-emerald-500/10">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-10 -left-10 w-80 h-80 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="relative overflow-hidden rounded-3xl border border-blue-500/30 bg-gradient-to-br from-[#0b1220] via-[#0b1220] to-[#0b1220] p-6 sm:p-8 shadow-2xl shadow-blue-500/10">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-10 -left-10 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-2">
             <div className="flex items-center gap-3">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-black tracking-wider uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-sm">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-black tracking-wider uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30 shadow-sm">
                 <Flag className="w-3.5 h-3.5" />
                 <span>ROBOT GAMES 2026 • CATEGORY 2</span>
               </div>
 
               {currentTime && (
                 <div className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-semibold bg-black/40 text-slate-300 border border-white/10">
-                  <Clock className="w-3 h-3 text-emerald-400 animate-spin" style={{ animationDuration: '8s' }} />
+                  <Clock className="w-3 h-3 text-blue-400 animate-spin" style={{ animationDuration: '8s' }} />
                   <span>LIVE CLOCK: {currentTime}</span>
                 </div>
               )}
@@ -201,7 +193,7 @@ export default function RobotRacePublicPage() {
                 onClick={() => { setActiveSection('SCHEDULE'); setSearchQuery(''); }}
                 className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${
                   activeSection === 'SCHEDULE'
-                    ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-black shadow-lg shadow-emerald-500/20 font-black scale-[1.02]'
+                    ? 'bg-gradient-to-r from-blue-500 to-blue-400 text-black shadow-lg shadow-blue-500/20 font-black scale-[1.02]'
                     : 'text-slate-400 hover:text-white hover:bg-white/5'
                 }`}
               >
@@ -213,7 +205,7 @@ export default function RobotRacePublicPage() {
                 onClick={() => { setActiveSection('LEADERBOARD'); setSearchQuery(''); }}
                 className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${
                   activeSection === 'LEADERBOARD'
-                    ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-black shadow-lg shadow-amber-500/20 font-black scale-[1.02]'
+                    ? 'bg-gradient-to-r from-blue-500 to-blue-400 text-black shadow-lg shadow-blue-500/20 font-black scale-[1.02]'
                     : 'text-slate-400 hover:text-white hover:bg-white/5'
                 }`}
               >
@@ -222,22 +214,13 @@ export default function RobotRacePublicPage() {
               </button>
             </div>
 
-            {/* Organizer Portal Link (Admin Login / Control Panel) */}
-            <Link
-              href="/admin/race"
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-amber-300 border border-white/10 hover:border-amber-500/40 transition-colors"
-              title="Access Admin Race Management"
-            >
-              <Lock className="w-3.5 h-3.5 text-amber-400" />
-              <span>Organizer Portal</span>
-            </Link>
           </div>
         </div>
       </div>
 
       {/* Error Banner */}
       {error && (
-        <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between">
+        <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
@@ -255,7 +238,7 @@ export default function RobotRacePublicPage() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-2 border-b border-white/10">
             <div>
               <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-emerald-400" />
+                <Calendar className="w-4 h-4 text-blue-400" />
                 <h2 className="text-lg font-black text-white uppercase tracking-tight">
                   OFFICIAL DEPARTURE TIME SCHEDULE
                 </h2>
@@ -288,20 +271,20 @@ export default function RobotRacePublicPage() {
             </div>
 
             <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-white/10">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-sky-400 block">In Queue</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400 block">In Queue</span>
               <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-xl font-black text-sky-300">{scheduleStats.scheduled}</span>
+                <span className="text-xl font-black text-blue-300">{scheduleStats.scheduled}</span>
                 <span className="text-xs text-slate-500 font-mono">Upcoming</span>
               </div>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-emerald-500/30 bg-emerald-950/20">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 block flex items-center gap-1.5">
-                <Check className="w-3 h-3 text-emerald-400" />
+            <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-blue-500/30 bg-blue-950/20">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400 block flex items-center gap-1.5">
+                <Check className="w-3 h-3 text-blue-400" />
                 Completed
               </span>
               <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-xl font-black text-emerald-300">{scheduleStats.completed}</span>
+                <span className="text-xl font-black text-blue-300">{scheduleStats.completed}</span>
                 <span className="text-xs text-slate-500 font-mono">Finished</span>
               </div>
             </div>
@@ -309,7 +292,7 @@ export default function RobotRacePublicPage() {
             <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-white/10">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Schedule Window</span>
               <div className="mt-1 flex items-center justify-between text-xs font-mono">
-                <span className="text-emerald-400 font-bold">{scheduleStats.firstTime}</span>
+                <span className="text-blue-400 font-bold">{scheduleStats.firstTime}</span>
                 <span className="text-slate-600">→</span>
                 <span className="text-slate-300 font-bold">{scheduleStats.lastTime}</span>
               </div>
@@ -321,9 +304,12 @@ export default function RobotRacePublicPage() {
             <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-4 flex items-center justify-between">
               <div className="flex items-center gap-3 min-w-0">
                 {upNext.logoUrl ? (
-                  <img
+                  <Image
                     src={upNext.logoUrl}
                     alt={upNext.teamName}
+                    width={44}
+                    height={44}
+                    unoptimized
                     className="w-11 h-11 rounded-xl object-contain bg-slate-950 border border-white/10 p-1 shrink-0"
                   />
                 ) : (
@@ -332,16 +318,16 @@ export default function RobotRacePublicPage() {
                   </div>
                 )}
                 <div className="min-w-0">
-                  <span className="text-[9px] font-black uppercase text-sky-400 block">UP NEXT • ON DECK</span>
+                  <span className="text-[9px] font-black uppercase text-blue-400 block">UP NEXT • ON DECK</span>
                   <h4 className="text-base font-bold text-white truncate">{upNext.teamName}</h4>
                   <p className="text-xs text-slate-400 truncate">
-                    {upNext.robotName ? `Bot: ${upNext.robotName}` : upNext.organization || 'In Queue'}
+                    {upNext.organization || 'In Queue'}
                   </p>
                 </div>
               </div>
               <div className="text-right shrink-0 ml-3">
                 <span className="text-[10px] text-slate-400 uppercase font-mono block">Departure</span>
-                <div className="text-base font-black font-mono text-amber-400">
+                <div className="text-base font-black font-mono text-blue-400">
                   {upNext.scheduledTime}
                 </div>
               </div>
@@ -357,7 +343,7 @@ export default function RobotRacePublicPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search teams, robots, or scheduled times..."
-                className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-900/90 border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-emerald-500"
+                className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-900/90 border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-blue-500"
               />
             </div>
 
@@ -378,7 +364,7 @@ export default function RobotRacePublicPage() {
                   onClick={() => setDivisionFilter('SCHOOL')}
                   className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
                     divisionFilter === 'SCHOOL'
-                      ? 'bg-sky-600 text-white shadow-sm'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
@@ -388,7 +374,7 @@ export default function RobotRacePublicPage() {
                   onClick={() => setDivisionFilter('UNIVERSITY')}
                   className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
                     divisionFilter === 'UNIVERSITY'
-                      ? 'bg-purple-600 text-white shadow-sm'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
@@ -403,7 +389,7 @@ export default function RobotRacePublicPage() {
                     onClick={() => setStatusFilter(st)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
                       statusFilter === st
-                        ? 'bg-emerald-500 text-black shadow-md'
+                        ? 'bg-blue-500 text-black shadow-md'
                         : 'bg-slate-900/80 text-slate-400 hover:text-white border border-white/5'
                     }`}
                   >
@@ -417,7 +403,7 @@ export default function RobotRacePublicPage() {
           {/* Time Schedule Table (STRICTLY VIEW ONLY: TIMES & TEAMS ONLY) */}
           {loading ? (
             <div className="p-16 text-center rounded-3xl border border-white/10 bg-slate-900/40">
-              <Loader2 className="w-8 h-8 mx-auto text-emerald-400 animate-spin mb-3" />
+              <Loader2 className="w-8 h-8 mx-auto text-blue-400 animate-spin mb-3" />
               <p className="text-sm font-semibold text-slate-300">Loading schedule...</p>
             </div>
           ) : schedule.length === 0 ? (
@@ -438,7 +424,6 @@ export default function RobotRacePublicPage() {
                     <th className="py-3 px-4">Assigned Departure Time</th>
                     <th className="py-3 px-4">Logo</th>
                     <th className="py-3 px-4">Team Name</th>
-                    <th className="py-3 px-4">Robot Name</th>
                     <th className="py-3 px-4">Faculty / Department</th>
                     <th className="py-3 px-4">Track / Bay</th>
                     <th className="py-3 px-4 text-right">Status</th>
@@ -464,11 +449,11 @@ export default function RobotRacePublicPage() {
 
                         <td className="py-3 px-4 whitespace-nowrap">
                           {isSchool ? (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
                               SCHOOL
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
                               UNIVERSITY
                             </span>
                           )}
@@ -477,7 +462,7 @@ export default function RobotRacePublicPage() {
                         {/* Large Assigned Departure Time */}
                         <td className="py-3 px-4 font-mono font-black text-sm whitespace-nowrap">
                           <div className="flex items-center gap-1.5">
-                            <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                            <Clock className="w-3.5 h-3.5 text-blue-400" />
                             <span className="text-white">
                               {slot.scheduledTime}
                             </span>
@@ -486,9 +471,12 @@ export default function RobotRacePublicPage() {
 
                         <td className="py-3 px-4">
                           {slot.logoUrl ? (
-                            <img
+                            <Image
                               src={slot.logoUrl}
                               alt={slot.teamName}
+                              width={32}
+                              height={32}
+                              unoptimized
                               className="w-8 h-8 rounded-lg object-contain bg-slate-950 border border-white/10 p-0.5"
                               onError={(e) => {
                                 (e.target as HTMLElement).style.display = 'none';
@@ -505,10 +493,6 @@ export default function RobotRacePublicPage() {
                           {slot.teamName}
                         </td>
 
-                        <td className="py-3 px-4 text-emerald-400 font-medium whitespace-nowrap">
-                          {slot.robotName || '—'}
-                        </td>
-
                         <td className="py-3 px-4 text-slate-400 whitespace-nowrap">
                           {slot.organization || '—'}
                         </td>
@@ -519,7 +503,7 @@ export default function RobotRacePublicPage() {
 
                         <td className="py-3 px-4 text-right whitespace-nowrap">
                           {slot.status === 'COMPLETED' ? (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
                               COMPLETED
                             </span>
                           ) : (
@@ -546,7 +530,7 @@ export default function RobotRacePublicPage() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-2 border-b border-white/10">
             <div>
               <div className="flex items-center gap-2">
-                <Trophy className="w-5 h-5 text-amber-400" />
+                <Trophy className="w-5 h-5 text-blue-400" />
                 <h2 className="text-lg font-black text-white uppercase tracking-tight">
                   OFFICIAL ROBOT RACE LEADERBOARD & SCORES
                 </h2>
@@ -572,7 +556,7 @@ export default function RobotRacePublicPage() {
                   onClick={() => setDivisionFilter('SCHOOL')}
                   className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
                     divisionFilter === 'SCHOOL'
-                      ? 'bg-sky-600 text-white shadow-sm'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
@@ -582,7 +566,7 @@ export default function RobotRacePublicPage() {
                   onClick={() => setDivisionFilter('UNIVERSITY')}
                   className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
                     divisionFilter === 'UNIVERSITY'
-                      ? 'bg-purple-600 text-white shadow-sm'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
@@ -605,27 +589,27 @@ export default function RobotRacePublicPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* 1st Place */}
               {podium.first && (
-                <div className="order-1 md:order-2 p-5 rounded-3xl border-2 border-amber-500/60 bg-gradient-to-br from-amber-950/40 via-slate-900 to-[#191307] shadow-2xl shadow-amber-500/10 text-center relative overflow-hidden">
-                  <div className="absolute top-2 right-3 text-amber-400/20 font-black text-6xl select-none font-mono">1</div>
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-500 text-black mb-3">
+                <div className="order-1 md:order-2 p-5 rounded-3xl border-2 border-blue-500/60 bg-gradient-to-br from-blue-950/40 via-slate-900 to-[#0b1220] shadow-2xl shadow-blue-500/10 text-center relative overflow-hidden">
+                  <div className="absolute top-2 right-3 text-blue-400/20 font-black text-6xl select-none font-mono">1</div>
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-blue-500 text-black mb-3">
                     <Trophy className="w-3.5 h-3.5 fill-black" />
                     <span>RACE LEADER • 1ST PLACE</span>
                   </div>
 
-                  <div className="w-16 h-16 mx-auto rounded-2xl bg-slate-950 border border-amber-500/40 p-1.5 mb-2 shadow-lg">
+                  <div className="w-16 h-16 mx-auto rounded-2xl bg-slate-950 border border-blue-500/40 p-1.5 mb-2 shadow-lg">
                     {podium.first.logoUrl ? (
-                      <img src={podium.first.logoUrl} alt={podium.first.teamName} className="w-full h-full object-contain" />
+                      <Image src={podium.first.logoUrl} alt={podium.first.teamName} width={64} height={64} unoptimized className="w-full h-full object-contain" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-amber-400 font-black text-xl">#1</div>
+                      <div className="w-full h-full flex items-center justify-center text-blue-400 font-black text-xl">#1</div>
                     )}
                   </div>
 
                   <h3 className="text-xl font-black text-white">{podium.first.teamName}</h3>
-                  <p className="text-xs text-amber-300 font-medium">Bot: {podium.first.robotName || 'Primary Unit'}</p>
+                  <p className="text-xs text-blue-300 font-medium">{podium.first.organization || 'Race finalist'}</p>
 
-                  <div className="mt-3 pt-3 border-t border-amber-500/20">
+                  <div className="mt-3 pt-3 border-t border-blue-500/20">
                     <span className="text-[10px] uppercase font-mono text-slate-400 block">Fastest Lap / Score</span>
-                    <span className="text-2xl font-black font-mono text-amber-400">
+                    <span className="text-2xl font-black font-mono text-blue-400">
                       {podium.first.timeRecorded || `${podium.first.score} pts`}
                     </span>
                   </div>
@@ -643,14 +627,14 @@ export default function RobotRacePublicPage() {
 
                   <div className="w-14 h-14 mx-auto rounded-2xl bg-slate-950 border border-slate-400/40 p-1.5 mb-2 shadow-lg">
                     {podium.second.logoUrl ? (
-                      <img src={podium.second.logoUrl} alt={podium.second.teamName} className="w-full h-full object-contain" />
+                      <Image src={podium.second.logoUrl} alt={podium.second.teamName} width={56} height={56} unoptimized className="w-full h-full object-contain" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-slate-300 font-black text-lg">#2</div>
                     )}
                   </div>
 
                   <h3 className="text-lg font-bold text-white">{podium.second.teamName}</h3>
-                  <p className="text-xs text-slate-400 font-medium">Bot: {podium.second.robotName || 'Primary Unit'}</p>
+                  <p className="text-xs text-slate-400 font-medium">{podium.second.organization || 'Race finalist'}</p>
 
                   <div className="mt-3 pt-3 border-t border-white/10">
                     <span className="text-[10px] uppercase font-mono text-slate-400 block">Score / Time</span>
@@ -663,27 +647,27 @@ export default function RobotRacePublicPage() {
 
               {/* 3rd Place */}
               {podium.third && (
-                <div className="order-3 p-5 rounded-3xl border border-amber-700/40 bg-gradient-to-br from-[#191114] to-slate-950 text-center relative overflow-hidden">
-                  <div className="absolute top-2 right-3 text-amber-700/20 font-black text-6xl select-none font-mono">3</div>
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-700/20 text-amber-300 border border-amber-600/30 mb-3">
-                    <Medal className="w-3.5 h-3.5 text-amber-400" />
+                <div className="order-3 p-5 rounded-3xl border border-blue-700/40 bg-gradient-to-br from-[#0b1220] to-slate-950 text-center relative overflow-hidden">
+                  <div className="absolute top-2 right-3 text-blue-700/20 font-black text-6xl select-none font-mono">3</div>
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-blue-700/20 text-blue-300 border border-blue-600/30 mb-3">
+                    <Medal className="w-3.5 h-3.5 text-blue-400" />
                     <span>3RD PLACE</span>
                   </div>
 
-                  <div className="w-14 h-14 mx-auto rounded-2xl bg-slate-950 border border-amber-700/40 p-1.5 mb-2 shadow-lg">
+                  <div className="w-14 h-14 mx-auto rounded-2xl bg-slate-950 border border-blue-700/40 p-1.5 mb-2 shadow-lg">
                     {podium.third.logoUrl ? (
-                      <img src={podium.third.logoUrl} alt={podium.third.teamName} className="w-full h-full object-contain" />
+                      <Image src={podium.third.logoUrl} alt={podium.third.teamName} width={56} height={56} unoptimized className="w-full h-full object-contain" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-amber-400 font-black text-lg">#3</div>
+                      <div className="w-full h-full flex items-center justify-center text-blue-400 font-black text-lg">#3</div>
                     )}
                   </div>
 
                   <h3 className="text-lg font-bold text-white">{podium.third.teamName}</h3>
-                  <p className="text-xs text-slate-400 font-medium">Bot: {podium.third.robotName || 'Primary Unit'}</p>
+                  <p className="text-xs text-slate-400 font-medium">{podium.third.organization || 'Race finalist'}</p>
 
                   <div className="mt-3 pt-3 border-t border-white/10">
                     <span className="text-[10px] uppercase font-mono text-slate-400 block">Score / Time</span>
-                    <span className="text-xl font-black font-mono text-amber-400">
+                    <span className="text-xl font-black font-mono text-blue-400">
                       {podium.third.timeRecorded || `${podium.third.score} pts`}
                     </span>
                   </div>
@@ -701,7 +685,6 @@ export default function RobotRacePublicPage() {
                   <th className="py-3 px-4">Category</th>
                   <th className="py-3 px-4">Logo</th>
                   <th className="py-3 px-4">Team Name</th>
-                  <th className="py-3 px-4">Robot Name</th>
                   <th className="py-3 px-4">Faculty / Department</th>
                   <th className="py-3 px-4">Race Score / Lap Time</th>
                   <th className="py-3 px-4">Gap / Delta</th>
@@ -732,13 +715,13 @@ export default function RobotRacePublicPage() {
                       key={entry.id}
                       className={`transition-colors ${
                         isFirst
-                          ? 'bg-amber-950/20 hover:bg-amber-950/30 font-semibold'
+                          ? 'bg-blue-950/20 hover:bg-blue-950/30 font-semibold'
                           : 'hover:bg-white/5'
                       }`}
                     >
                       <td className="py-3 px-4 font-mono font-bold">
                         {isFirst ? (
-                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-400 text-black font-black text-xs shadow-md">
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-400 text-black font-black text-xs shadow-md">
                             1
                           </span>
                         ) : isSecond ? (
@@ -746,7 +729,7 @@ export default function RobotRacePublicPage() {
                             2
                           </span>
                         ) : isThird ? (
-                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-700 text-white font-black text-xs">
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-700 text-white font-black text-xs">
                             3
                           </span>
                         ) : (
@@ -758,11 +741,11 @@ export default function RobotRacePublicPage() {
 
                       <td className="py-3 px-4 whitespace-nowrap">
                         {isSchool ? (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
                             SCHOOL
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
                             UNIVERSITY
                           </span>
                         )}
@@ -770,9 +753,12 @@ export default function RobotRacePublicPage() {
 
                       <td className="py-3 px-4">
                         {entry.logoUrl ? (
-                          <img
+                          <Image
                             src={entry.logoUrl}
                             alt={entry.teamName}
+                            width={32}
+                            height={32}
+                            unoptimized
                             className="w-8 h-8 rounded-lg object-contain bg-slate-950 border border-white/10 p-0.5"
                             onError={(e) => {
                               (e.target as HTMLElement).style.display = 'none';
@@ -789,21 +775,17 @@ export default function RobotRacePublicPage() {
                         {entry.teamName}
                       </td>
 
-                      <td className="py-3 px-4 text-emerald-400 font-medium whitespace-nowrap">
-                        {entry.robotName || '—'}
-                      </td>
-
                       <td className="py-3 px-4 text-slate-400 whitespace-nowrap">
                         {entry.organization || '—'}
                       </td>
 
                       <td className="py-3 px-4 font-mono whitespace-nowrap">
                         {entry.timeRecorded ? (
-                          <span className="text-base font-black text-amber-300 px-2 py-0.5 rounded bg-black/40 border border-amber-500/30">
+                          <span className="text-base font-black text-blue-300 px-2 py-0.5 rounded bg-black/40 border border-blue-500/30">
                             {entry.timeRecorded}
                           </span>
                         ) : entry.score !== null && entry.score !== undefined ? (
-                          <span className="text-base font-black text-amber-300 px-2 py-0.5 rounded bg-black/40 border border-amber-500/30">
+                          <span className="text-base font-black text-blue-300 px-2 py-0.5 rounded bg-black/40 border border-blue-500/30">
                             {entry.score} pts
                           </span>
                         ) : (
@@ -813,7 +795,7 @@ export default function RobotRacePublicPage() {
 
                       <td className="py-3 px-4 font-mono text-xs text-slate-400 whitespace-nowrap">
                         {deltaText === 'LEADER' ? (
-                          <span className="text-amber-400 font-bold text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">
+                          <span className="text-blue-400 font-bold text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/20">
                             LEADER
                           </span>
                         ) : (
@@ -823,7 +805,7 @@ export default function RobotRacePublicPage() {
 
                       <td className="py-3 px-4 text-right whitespace-nowrap">
                         {hasScore ? (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
                             VERIFIED
                           </span>
                         ) : (

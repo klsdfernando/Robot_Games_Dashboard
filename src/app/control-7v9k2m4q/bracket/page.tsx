@@ -15,7 +15,11 @@ import {
   Sparkles,
   HelpCircle,
   GitBranch,
-  Columns3
+  Columns3,
+  RotateCcw,
+  Lock,
+  Unlock,
+  Loader2
 } from 'lucide-react';
 import { Team, Match } from '@/lib/types';
 
@@ -26,6 +30,8 @@ export default function AdminBracketPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
   const [previewViewMode, setPreviewViewMode] = useState<'TREE' | 'CARDS'>('TREE');
+  const [randomizePairings, setRandomizePairings] = useState(false);
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
 
   // Round 1 Generation & Preview State
   const [previewPlan, setPreviewPlan] = useState<{
@@ -113,27 +119,47 @@ export default function AdminBracketPage() {
     }
   };
 
-  const handleConfirmRound1 = async () => {
+  const handleConfirmFullBracket = async () => {
     if (!overview?.categoryId) return;
-    if (!confirm(`Confirm and generate Round 1 bracket for ${selectedCategory}?`)) return;
-
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/round1', {
+      const res = await fetch('/api/admin/bracket/confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           categoryId: overview.categoryId,
-          manualByeTeamId: selectedManualBye || undefined,
-          previewOnly: false
+          randomize: randomizePairings
         })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to start Round 1');
+      if (!res.ok) throw new Error(data.error || 'Failed to generate full bracket');
 
-      setSuccess('Round 1 officially locked and generated!');
+      setSuccess('Full tournament bracket architecture generated and locked! Downstream slots will bill live as matches are scored.');
       setPreviewPlan(null);
+      await refresh();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetTournamentBracket = async () => {
+    if (!overview?.categoryId) return;
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ categoryId: overview.categoryId })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to reset tournament bracket');
+
+      setSuccess('Tournament bracket reset successfully. Team roster is unlocked!');
+      setIsResetModalOpen(false);
       await refresh();
     } catch (err: any) {
       setError(err.message);
@@ -170,30 +196,42 @@ export default function AdminBracketPage() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
         <div>
           <div className="flex items-center gap-2">
-            <Swords className="w-5 h-5 text-amber-400" />
+            <Swords className="w-5 h-5 text-blue-400" />
             <h1 className="text-xl font-bold text-white">
               Bracket Architecture & Progression ({selectedCategory})
             </h1>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Generate initial Round 1 pairings, review BYE distributions, and progress tournament stages through the tree.
+            Pre-generate full tournament slots, lock confirmed teams, and track automated downstream progression as matches finish.
           </p>
         </div>
 
         {r1Stage && (
-          <button
-            onClick={handleAdvanceNextStage}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-sky-500 hover:bg-sky-400 text-slate-950 transition-colors shadow-lg shadow-sky-500/20"
-          >
-            <span>Progress to Next Stage</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsResetModalOpen(true)}
+              disabled={loading}
+              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-blue-950/60 hover:text-blue-400 text-slate-300 border border-white/10 transition-colors"
+              title="Reset tournament bracket and unlock teams"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span>Reset Bracket</span>
+            </button>
+
+            <button
+              onClick={handleAdvanceNextStage}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-blue-500 hover:bg-blue-400 text-slate-950 transition-colors shadow-lg shadow-blue-500/20"
+            >
+              <span>Progress Stage</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
         )}
       </div>
 
       {error && (
-        <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center justify-between">
+        <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4" />
             <span>{error}</span>
@@ -203,7 +241,7 @@ export default function AdminBracketPage() {
       )}
 
       {success && (
-        <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center justify-between">
+        <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Check className="w-4 h-4" />
             <span>{success}</span>
@@ -212,52 +250,86 @@ export default function AdminBracketPage() {
         </div>
       )}
 
-      {/* Round 1 Generation Section (If Round 1 not generated yet) */}
+      {/* Full Tournament Bracket Generation Section (If Bracket not generated yet) */}
       {!r1Stage ? (
         <div className="p-6 rounded-3xl bg-slate-900 border border-white/10 space-y-6">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div>
-              <h2 className="text-lg font-black text-white flex items-center gap-2">
-                <span>Generate Round 1 Bracket</span>
-                <span className="text-xs px-2 py-0.5 rounded bg-sky-500/20 text-sky-300">
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-black text-white">
+                  Generate Full Tournament Bracket Slots
+                </h2>
+                <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
                   {activeTeams.length} Active Teams
                 </span>
-              </h2>
-              <p className="text-xs text-slate-400 mt-1">
-                {activeTeams.length % 2 !== 0
-                  ? `Odd number of teams (${activeTeams.length}). The algorithm will automatically allocate 1 BYE.`
-                  : `Even number of teams (${activeTeams.length}). Will produce ${activeTeams.length / 2} clean 1v1 pairings.`}
+              </div>
+              <p className="text-xs text-slate-300 mt-1 max-w-2xl">
+                Lock the {selectedCategory} roster and pre-build all tournament stages (Round 1, Wildcards, Semifinals, Winners Final, Wildcard Final, and Grand Finals). As matches finish in the arena, winning teams and wildcard drops will automatically bill downstream positions.
               </p>
             </div>
 
-            <button
-              onClick={handleGeneratePreview}
-              disabled={loading || activeTeams.length < 2}
-              className="px-5 py-3 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-black flex items-center gap-2 shadow-lg shadow-amber-500/20 disabled:opacity-50"
-            >
-              <Play className="w-4 h-4" />
-              <span>Preview Proposed Round 1</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={handleGeneratePreview}
+                disabled={loading || activeTeams.length < 2}
+                className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center gap-2 border border-white/10 disabled:opacity-50"
+              >
+                <Play className="w-4 h-4 text-blue-400" />
+                <span>Preview Pairings</span>
+              </button>
+
+              <button
+                onClick={handleConfirmFullBracket}
+                disabled={loading || activeTeams.length < 2}
+                className="px-5 py-2.5 rounded-xl text-xs font-black bg-gradient-to-r from-blue-500 to-blue-400 hover:from-blue-400 hover:to-blue-300 text-black flex items-center gap-2 shadow-lg shadow-blue-500/20 disabled:opacity-50"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Generating Slots...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4 stroke-[3]" />
+                    <span>Confirm & Generate Full Bracket</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-slate-950/60 border border-white/5 flex items-center gap-3">
+            <input
+              id="bracketRandomize"
+              type="checkbox"
+              checked={randomizePairings}
+              onChange={(e) => setRandomizePairings(e.target.checked)}
+              className="w-4 h-4 rounded text-blue-500 focus:ring-0 accent-blue-500 cursor-pointer"
+            />
+            <label htmlFor="bracketRandomize" className="text-xs text-slate-300 cursor-pointer select-none">
+              <span className="font-semibold text-white">Shuffle / Randomize match pairings</span>
+              <span className="text-[11px] text-slate-400 ml-2">(Uncheck to preserve registered seed order)</span>
+            </label>
           </div>
 
           {/* Manual BYE Selector (For Odd Teams) */}
           {activeTeams.length % 2 !== 0 && (
-            <div className="p-4 rounded-2xl bg-purple-950/20 border border-purple-500/30 space-y-2">
-              <label className="block text-xs font-bold text-purple-300">
+            <div className="p-4 rounded-2xl bg-blue-950/20 border border-blue-500/30 space-y-2">
+              <label className="block text-xs font-bold text-blue-300">
                 Manual BYE Override (Optional)
               </label>
               <p className="text-[11px] text-slate-400">
-                By default, the system chooses a random eligible participant. You may manually select a team to receive the automatic Round 1 pass:
+                Odd number of teams ({activeTeams.length}). By default, top seeds receive an automatic pass:
               </p>
               <select
                 value={selectedManualBye}
                 onChange={(e) => setSelectedManualBye(e.target.value)}
-                className="w-full sm:w-80 px-3 py-2 rounded-xl bg-slate-900 border border-purple-500/40 text-white text-xs focus:outline-none"
+                className="w-full sm:w-80 px-3 py-2 rounded-xl bg-slate-900 border border-blue-500/40 text-white text-xs focus:outline-none"
               >
-                <option value="">-- Let system choose randomly --</option>
+                <option value="">-- Let system choose based on seeds --</option>
                 {activeTeams.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.name} {t.robotName ? `(${t.robotName})` : ''}
+                    {t.name}
                   </option>
                 ))}
               </select>
@@ -266,7 +338,7 @@ export default function AdminBracketPage() {
 
           {/* Proposed Round 1 Preview Modal / Panel */}
           {previewPlan && (
-            <div className="p-5 rounded-2xl bg-[#0a0f1d] border border-amber-500/40 space-y-4 animate-in fade-in">
+            <div className="p-5 rounded-2xl bg-[#0a0f1d] border border-blue-500/40 space-y-4 animate-in fade-in">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-white/10 gap-2">
                 <div>
                   <h3 className="font-bold text-white text-sm">
@@ -282,7 +354,7 @@ export default function AdminBracketPage() {
                     <button
                       onClick={() => setPreviewViewMode('TREE')}
                       className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all ${
-                        previewViewMode === 'TREE' ? 'bg-sky-500 text-slate-950' : 'text-slate-400 hover:text-white'
+                        previewViewMode === 'TREE' ? 'bg-blue-500 text-slate-950' : 'text-slate-400 hover:text-white'
                       }`}
                     >
                       Tree Look
@@ -290,7 +362,7 @@ export default function AdminBracketPage() {
                     <button
                       onClick={() => setPreviewViewMode('CARDS')}
                       className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all ${
-                        previewViewMode === 'CARDS' ? 'bg-sky-500 text-slate-950' : 'text-slate-400 hover:text-white'
+                        previewViewMode === 'CARDS' ? 'bg-blue-500 text-slate-950' : 'text-slate-400 hover:text-white'
                       }`}
                     >
                       Cards
@@ -306,12 +378,12 @@ export default function AdminBracketPage() {
                   </button>
 
                   <button
-                    onClick={handleConfirmRound1}
+                    onClick={handleConfirmFullBracket}
                     disabled={loading}
-                    className="px-4 py-1.5 rounded-lg text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-black flex items-center gap-1.5 shadow-md shadow-emerald-500/20"
+                    className="px-4 py-1.5 rounded-lg text-xs font-bold bg-blue-500 hover:bg-blue-400 text-black flex items-center gap-1.5 shadow-md shadow-blue-500/20"
                   >
                     <Check className="w-4 h-4 stroke-[3]" />
-                    <span>Confirm & Lock Round 1</span>
+                    <span>Confirm & Lock Full Bracket</span>
                   </button>
                 </div>
               </div>
@@ -357,15 +429,15 @@ export default function AdminBracketPage() {
                   ))}
 
                   {previewPlan.byeTeam && (
-                    <div className="p-3.5 rounded-xl bg-purple-950/30 border border-purple-500/40">
-                      <div className="flex items-center justify-between mb-2 text-[10px] text-purple-300 font-mono">
+                    <div className="p-3.5 rounded-xl bg-blue-950/30 border border-blue-500/40">
+                      <div className="flex items-center justify-between mb-2 text-[10px] text-blue-300 font-mono">
                         <span>AUTOMATIC BYE</span>
                         <span className="font-bold">ADVANCE</span>
                       </div>
-                      <div className="p-3 rounded-lg bg-purple-900/40 text-white font-bold text-xs truncate">
+                      <div className="p-3 rounded-lg bg-blue-900/40 text-white font-bold text-xs truncate">
                         {previewPlan.byeTeam.name}
                       </div>
-                      <p className="text-[10px] text-purple-300 mt-2">
+                      <p className="text-[10px] text-blue-300 mt-2">
                         Advances automatically to Main Winner path without fighting this round.
                       </p>
                     </div>
@@ -390,9 +462,9 @@ export default function AdminBracketPage() {
                     key={stage.id}
                     className={`p-4 rounded-2xl border ${
                       stage.status === 'ACTIVE'
-                        ? 'bg-sky-950/30 border-sky-400'
+                        ? 'bg-blue-950/30 border-blue-400'
                         : stage.status === 'COMPLETED'
-                        ? 'bg-slate-900 border-emerald-500/30'
+                        ? 'bg-slate-900 border-blue-500/30'
                         : 'bg-slate-900/40 border-white/5 opacity-60'
                     }`}
                   >
@@ -400,9 +472,9 @@ export default function AdminBracketPage() {
                       <span className="font-bold text-white text-sm">{stage.displayName}</span>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                         stage.status === 'ACTIVE'
-                          ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
+                          ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
                           : stage.status === 'COMPLETED'
-                          ? 'bg-emerald-500/20 text-emerald-400'
+                          ? 'bg-blue-500/20 text-blue-400'
                           : 'bg-slate-800 text-slate-500'
                       }`}>
                         {stage.status}
@@ -421,7 +493,7 @@ export default function AdminBracketPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between px-1">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <GitBranch className="w-4 h-4 text-sky-400" />
+                <GitBranch className="w-4 h-4 text-blue-400" />
                 <span>Live Tournament Tree & Wildcard Separation</span>
               </h3>
             </div>
@@ -442,6 +514,65 @@ export default function AdminBracketPage() {
           match={selectedMatch}
           onClose={() => setSelectedMatch(null)}
         />
+      )}
+
+      {/* Modal for Reset Bracket */}
+      {isResetModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md bg-[#0e1628] border border-blue-500/40 rounded-3xl p-6 shadow-2xl text-slate-200 space-y-4">
+            <div className="flex items-center gap-3 pb-3 border-b border-white/10">
+              <div className="p-2 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                <RotateCcw className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-white text-base">
+                  Reset Tournament Bracket
+                </h3>
+                <p className="text-xs text-blue-400 font-medium">
+                  {selectedCategory} Division
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-blue-950/30 border border-blue-500/20 text-xs space-y-2 text-blue-200/90">
+              <p className="font-bold text-blue-300">
+                Are you sure you want to reset this tournament bracket?
+              </p>
+              <p className="text-[11px] text-slate-300">
+                This will delete all matches, stages, and combat records for {selectedCategory}. Teams will be reset to ACTIVE status and the roster will be unlocked.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => setIsResetModalOpen(false)}
+                disabled={loading}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleResetTournamentBracket}
+                disabled={loading}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-950/50 transition-all disabled:opacity-50"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Resetting...</span>
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Yes, Reset Bracket</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

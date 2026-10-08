@@ -5,12 +5,11 @@ import { useTournament } from '@/context/TournamentContext';
 import GraphicalBracket from '@/components/GraphicalBracket';
 import MatchDetailModal from '@/components/MatchDetailModal';
 import ChampionBanner from '@/components/ChampionBanner';
-import { Swords, Shield, Radio, RefreshCw, Trophy, Info } from 'lucide-react';
+import { Swords, RefreshCw, GitBranch } from 'lucide-react';
 
 export default function BracketPage() {
   const {
     selectedCategory,
-    setSelectedCategory,
     overview,
     stages,
     matches,
@@ -32,66 +31,35 @@ export default function BracketPage() {
         />
       )}
 
-      {/* Bracket Header with Division Switcher */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center border border-sky-500/30">
-              <Swords className="w-4 h-4" />
-            </div>
-            <div>
-              <span className="text-[10px] font-bold tracking-wider uppercase text-sky-400 block">
-                Robot Battles Category
-              </span>
-              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                TOURNAMENT BRACKET
-              </h1>
-            </div>
+      <section className="flex items-center justify-between gap-4 border-b border-white/10 pb-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-500/25 bg-blue-500/10 text-blue-400">
+            <GitBranch className="h-5 w-5" />
           </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Visual flowchart of Round 1 duels, Wildcard survival matches, Re-Entry play-ins, and Knockouts.
-          </p>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-400">{selectedCategory} division</p>
+            <h1 className="truncate text-xl font-black text-white sm:text-2xl">Tournament bracket</h1>
+          </div>
         </div>
-
-        {/* Division Selector & Refresh */}
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <div className="flex items-center bg-slate-900 p-1 rounded-xl border border-white/10 flex-1 sm:flex-initial">
-            <button
-              onClick={() => setSelectedCategory('HEAVYWEIGHT')}
-              className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                selectedCategory === 'HEAVYWEIGHT'
-                  ? 'bg-sky-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              HEAVYWEIGHT (30kg)
-            </button>
-            <button
-              onClick={() => setSelectedCategory('LIGHTWEIGHT')}
-              className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                selectedCategory === 'LIGHTWEIGHT'
-                  ? 'bg-amber-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              LIGHTWEIGHT (15kg)
-            </button>
-          </div>
-
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="hidden rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 sm:block">
+            {overview?.currentStageDisplayName || 'Bracket ready'}
+          </span>
           <button
             onClick={() => refresh()}
-            title="Refresh Bracket"
-            className="p-2.5 rounded-xl bg-slate-900 border border-white/10 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            title="Refresh bracket"
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-slate-400 transition hover:border-blue-500/30 hover:text-blue-300"
+            aria-label="Refresh bracket"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className="h-4 w-4" />
           </button>
         </div>
-      </div>
+      </section>
 
       {/* Bracket Component */}
       {isLoading ? (
         <div className="py-24 text-center text-slate-400">
-          <RefreshCw className="w-8 h-8 mx-auto mb-3 animate-spin text-sky-400" />
+          <RefreshCw className="w-8 h-8 mx-auto mb-3 animate-spin text-blue-400" />
           <p className="text-sm font-semibold">Loading tournament bracket...</p>
         </div>
       ) : matches.length === 0 ? (

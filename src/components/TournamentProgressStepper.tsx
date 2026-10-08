@@ -37,16 +37,16 @@ export default function TournamentProgressStepper({ stages, currentStage, isComp
               <React.Fragment key={stage.id}>
                 <div className={`flex items-center gap-2.5 px-3 py-2 rounded-xl border text-xs font-semibold transition-all ${
                   isStageCompleted
-                    ? 'bg-slate-900/80 border-emerald-500/30 text-emerald-400'
+                    ? 'bg-slate-900/80 border-blue-500/30 text-blue-400'
                     : isActive
-                    ? 'bg-sky-950/60 border-sky-400 text-white shadow-lg shadow-sky-500/10'
+                    ? 'bg-blue-950/60 border-blue-400 text-white shadow-lg shadow-blue-500/10'
                     : 'bg-slate-900/30 border-white/5 text-slate-500'
                 }`}>
                   <div className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold ${
                     isStageCompleted
-                      ? 'bg-emerald-500 text-black'
+                      ? 'bg-blue-500 text-black'
                       : isActive
-                      ? 'bg-sky-400 text-black animate-pulse'
+                      ? 'bg-blue-400 text-black animate-pulse'
                       : 'bg-slate-800 text-slate-500'
                   }`}>
                     {isStageCompleted ? <Check className="w-3 h-3 stroke-[3]" /> : idx + 1}
@@ -55,7 +55,7 @@ export default function TournamentProgressStepper({ stages, currentStage, isComp
                   <span>{stage.displayName}</span>
 
                   {isActive && (
-                    <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase bg-sky-500/20 text-sky-400 border border-sky-500/30">
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30">
                       ACTIVE
                     </span>
                   )}
@@ -63,7 +63,7 @@ export default function TournamentProgressStepper({ stages, currentStage, isComp
 
                 {idx < stages.length - 1 && (
                   <div className={`w-4 h-0.5 ${
-                    isStageCompleted ? 'bg-emerald-500/40' : 'bg-slate-800'
+                    isStageCompleted ? 'bg-blue-500/40' : 'bg-slate-800'
                   }`} />
                 )}
               </React.Fragment>

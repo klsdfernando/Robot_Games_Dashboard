@@ -1,7 +1,6 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
-import bcrypt from 'bcryptjs';
 
 function getDatabaseInstance(): Database.Database {
   // Detect if running in serverless / read-only environment like Vercel or AWS Lambda
@@ -284,7 +283,7 @@ export function initDatabase() {
       'cat-heavyweight',
       'HEAVYWEIGHT',
       'Heavyweight Division',
-      'Maximum robot weight: 30kg. High-energy combat category.',
+      'Maximum robot weight: 20kg. High-energy combat category.',
       new Date().toISOString()
     );
 
@@ -292,7 +291,7 @@ export function initDatabase() {
       'cat-lightweight',
       'LIGHTWEIGHT',
       'Lightweight Division',
-      'Maximum robot weight: 15kg. Fast-paced tactical combat category.',
+      'Maximum robot weight: 3kg. Fast-paced tactical combat category.',
       new Date().toISOString()
     );
 
@@ -306,16 +305,6 @@ export function initDatabase() {
     insertSettings.run('set-lw', 'cat-lightweight', 'MANUAL', 0, 1, new Date().toISOString());
   }
 
-  // Seed default admin if none exists (admin / admin123)
-  const adminCount = db.prepare('SELECT COUNT(*) as count FROM admin_users').get() as { count: number };
-  if (adminCount.count === 0) {
-    const salt = bcrypt.genSaltSync(10);
-    const hash = bcrypt.hashSync('admin123', salt);
-    db.prepare(`
-      INSERT INTO admin_users (id, username, password_hash, created_at)
-      VALUES (?, ?, ?, ?)
-    `).run('admin-default', 'admin', hash, new Date().toISOString());
-  }
   } catch (err) {
     console.warn('[DB Init Warning]:', err);
   }

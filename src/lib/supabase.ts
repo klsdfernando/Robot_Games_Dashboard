@@ -418,3 +418,106 @@ export async function fetchRaceScheduleFromSupabase(division?: 'ALL' | 'SCHOOL' 
   }
 }
 
+/**
+ * Syncs the entire combat tournament state (stages, matches, participants, teams) to Supabase.
+ */
+export async function syncTournamentStateToSupabase(categoryId: string): Promise<{ success: boolean; error?: string }> {
+  const client = getSupabaseAdminClient();
+  if (!client) return { success: false, error: 'Supabase not configured' };
+
+  try {
+    const { getStages, getMatches, getTeams } = await import('@/lib/repository');
+    const targetCatId = resolveSupabaseCategoryId(categoryId);
+
+    // 1. Sync teams
+    const teams = getTeams(categoryId);
+    for (const t of teams) {
+      await syncTeamToSupabase({
+        id: t.id,
+        name: t.name,
+        categoryId: targetCatId,
+        robotName: t.robotName,
+        organization: t.organization,
+        seed: t.seed,
+        status: t.status,
+        lives: t.lives,
+        isWithdrawn: t.isWithdrawn,
+        logoUrl: t.logoUrl,
+        notes: t.notes
+      });
+    }
+
+    // 2. Sync stages
+    const stages = getStages(categoryId);
+    for (const s of stages) {
+      await client.from('stages').upsert({
+        id: s.id,
+        category_id: targetCatId,
+        stage_type: s.stageType,
+        stage_order: s.stageOrder,
+        display_name: s.displayName,
+        status: s.status,
+        started_at: s.startedAt || null,
+        completed_at: s.completedAt || null
+      }, { onConflict: 'id' });
+    }
+
+    // 3. Sync matches and participants
+    const matches = getMatches(categoryId);
+    for (const m of matches) {
+      await client.from('matches').upsert({
+        id: m.id,
+        category_id: targetCatId,
+        stage_id: m.stageId,
+        stage_type: m.stageType,
+        match_number: m.matchNumber,
+        round_order: m.roundOrder,
+        status: m.status,
+        winner_team_id: m.winnerTeamId || null,
+        completed_at: m.completedAt || null,
+        next_match_id: m.nextMatchId || null,
+        wildcard_match_id: m.wildcardMatchId || null,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'id' });
+
+      for (const p of m.participants) {
+        await client.from('match_participants').upsert({
+          id: p.id,
+          match_id: m.id,
+          team_id: p.teamId || null,
+          placeholder_text: p.placeholderText || null,
+          participant_order: p.participantOrder,
+          is_winner: Boolean(p.isWinner),
+          score: p.score ?? 0,
+          advancement_source: p.advancementSource || null,
+          source_match_id: p.sourceMatchId || null
+        }, { onConflict: 'id' });
+      }
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.warn('[Supabase Sync Tournament State Error]:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Clears tournament stages and matches for a category from Supabase.
+ */
+export async function clearTournamentFromSupabase(categoryId: string): Promise<{ success: boolean; error?: string }> {
+  const client = getSupabaseAdminClient();
+  if (!client) return { success: false, error: 'Supabase not configured' };
+
+  try {
+    const targetCatId = resolveSupabaseCategoryId(categoryId);
+    await client.from('matches').delete().eq('category_id', targetCatId);
+    await client.from('stages').delete().eq('category_id', targetCatId);
+    return { success: true };
+  } catch (err: any) {
+    console.warn('[Supabase Clear Tournament Error]:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+

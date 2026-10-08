@@ -2,60 +2,60 @@
 
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { Shield, Swords, Flag } from 'lucide-react';
+import { Swords, Flag, Radio } from 'lucide-react';
 
 export default function Navbar() {
   const pathname = usePathname();
   const isRace = pathname.startsWith('/race');
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-white/10 bg-[#090d16]/95 backdrop-blur-md">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 gap-3">
-          {/* Brand Logo & Name */}
-          <Link href="/" className="flex items-center gap-2.5 group shrink-0">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-500 to-blue-700 flex items-center justify-center shadow-lg shadow-sky-500/20 group-hover:scale-105 transition-transform">
-              <Shield className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-base font-extrabold tracking-wider uppercase text-white">
-                  Robot Games
-                </span>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-400 border border-sky-500/30">
-                  2026
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-400 hidden sm:block leading-tight">
-                Championship Platform
-              </p>
-            </div>
+    <header className="sticky top-0 z-40 w-full border-b border-white/[0.08] bg-[#070a10]/88 backdrop-blur-2xl">
+      <div className="mx-auto max-w-[90rem] px-4 sm:px-6 lg:px-8">
+        <div className="flex h-16 items-center justify-between gap-3 sm:h-[4.5rem]">
+          <Link href="/" className="group flex min-h-11 shrink-0 items-center rounded-xl" aria-label="Robot Games home">
+            <Image
+              src="/robot-battles-logo.png"
+              alt="Robot Games 2K26"
+              width={160}
+              height={89}
+              priority
+              className="h-9 w-auto object-contain drop-shadow-[0_0_18px_rgba(37,99,235,0.28)] transition-transform group-hover:scale-[1.03] sm:h-11"
+            />
           </Link>
 
-          {/* Nav Bar: ONLY Robot Battles and Robot Race */}
-          <nav className="flex items-center bg-slate-900/90 p-1 rounded-xl border border-white/10 shadow-inner">
+          <div className="hidden items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-500 lg:flex">
+            <Radio className="h-3.5 w-3.5 text-blue-400" />
+            <span>Live event portal</span>
+          </div>
+
+          <nav aria-label="Tournament category" className="flex items-center rounded-xl border border-white/[0.09] bg-white/[0.035] p-1 shadow-inner">
             <Link
               href="/"
-              className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+              className={`flex min-h-10 items-center gap-2 rounded-lg px-3 text-[11px] font-bold transition-all sm:px-4 sm:text-xs ${
                 !isRace
-                  ? 'bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-md shadow-sky-500/25'
+                  ? 'bg-blue-600 text-white shadow-[0_8px_24px_rgba(37,99,235,0.24)]'
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
+              aria-current={!isRace ? 'page' : undefined}
             >
-              <Swords className="w-4 h-4" />
-              <span>Robot Battles</span>
+              <Swords className="h-4 w-4" />
+              <span className="hidden sm:inline">Robot Battles</span>
+              <span className="sm:hidden">Battles</span>
             </Link>
             <Link
               href="/race"
-              className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+              className={`flex min-h-10 items-center gap-2 rounded-lg px-3 text-[11px] font-bold transition-all sm:px-4 sm:text-xs ${
                 isRace
-                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-500/25'
+                  ? 'bg-blue-600 text-white shadow-[0_8px_24px_rgba(37,99,235,0.24)]'
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
+              aria-current={isRace ? 'page' : undefined}
             >
-              <Flag className="w-4 h-4" />
-              <span>Robot Race</span>
+              <Flag className="h-4 w-4" />
+              <span className="hidden sm:inline">Robot Race</span>
+              <span className="sm:hidden">Race</span>
             </Link>
           </nav>
         </div>
