@@ -3,6 +3,7 @@
 import React from 'react';
 import { Team, TournamentCategory } from '@/lib/types';
 import { Trophy, Award, Sparkles, Shield } from 'lucide-react';
+import TeamAvatar from './TeamAvatar';
 
 interface ChampionBannerProps {
   category: TournamentCategory;
@@ -66,16 +67,11 @@ export default function ChampionBanner({ category, champion, runnerUp, secondRun
                   <span className="text-[9px] font-mono text-slate-400">Finalist</span>
                 </div>
                 <div className="flex items-center gap-2.5">
-                  {runnerUp.logoUrl && (
-                    <img
-                      src={runnerUp.logoUrl}
-                      alt={runnerUp.name}
-                      className="w-9 h-9 rounded-lg object-contain bg-slate-950 border border-white/10 p-0.5 shrink-0"
-                      onError={(e) => {
-                        (e.target as HTMLElement).style.display = 'none';
-                      }}
-                    />
-                  )}
+                  <TeamAvatar
+                    logoUrl={runnerUp.logoUrl}
+                    name={runnerUp.name}
+                    size="md"
+                  />
                   <div>
                     <h4 className="text-base font-bold text-white">{runnerUp.name}</h4>
                     {runnerUp.organization && <span className="mt-0.5 block text-xs text-slate-400">{runnerUp.organization}</span>}
@@ -94,16 +90,11 @@ export default function ChampionBanner({ category, champion, runnerUp, secondRun
                   <span className="text-[9px] font-mono text-blue-400/70">Wildcard Final</span>
                 </div>
                 <div className="flex items-center gap-2.5">
-                  {secondRunnerUp.logoUrl && (
-                    <img
-                      src={secondRunnerUp.logoUrl}
-                      alt={secondRunnerUp.name}
-                      className="w-9 h-9 rounded-lg object-contain bg-slate-950 border border-white/10 p-0.5 shrink-0"
-                      onError={(e) => {
-                        (e.target as HTMLElement).style.display = 'none';
-                      }}
-                    />
-                  )}
+                  <TeamAvatar
+                    logoUrl={secondRunnerUp.logoUrl}
+                    name={secondRunnerUp.name}
+                    size="md"
+                  />
                   <div>
                     <h4 className="text-base font-bold text-white">{secondRunnerUp.name}</h4>
                     {secondRunnerUp.organization && <span className="mt-0.5 block text-xs text-blue-200/80">{secondRunnerUp.organization}</span>}

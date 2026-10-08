@@ -33,6 +33,14 @@ export default function AdminMatchesPage() {
   const [downstreamImpact, setDownstreamImpact] = useState<DownstreamImpact | null>(null);
   const [isCheckingImpact, setIsCheckingImpact] = useState(false);
 
+  // Stage filter for admin match console
+  const [selectedStageFilter, setSelectedStageFilter] = useState<string>('ALL');
+
+  const filteredMatches = React.useMemo(() => {
+    if (selectedStageFilter === 'ALL') return matches;
+    return matches.filter(m => m.stageId === selectedStageFilter || m.stageType === selectedStageFilter);
+  }, [matches, selectedStageFilter]);
+
   const openMatchControl = (match: Match) => {
     setActiveMatchForControl(match);
     setSelectedWinnerId(match.winnerTeamId || (match.participants[0]?.teamId || ''));
@@ -178,19 +186,61 @@ export default function AdminMatchesPage() {
         </div>
       )}
 
+      {/* Stage Selector Tabs */}
+      {stages.length > 0 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-2 -mx-2 px-2 no-scrollbar">
+          <button
+            onClick={() => setSelectedStageFilter('ALL')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors ${
+              selectedStageFilter === 'ALL'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-slate-900 text-slate-400 hover:text-white border border-white/5'
+            }`}
+          >
+            All Stages ({matches.length})
+          </button>
+          {stages.map((stage) => {
+            const count = matches.filter(m => m.stageId === stage.id).length;
+            if (count === 0) return null;
+            const isFilterActive = selectedStageFilter === stage.id;
+            return (
+              <button
+                key={stage.id}
+                onClick={() => setSelectedStageFilter(stage.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                  isFilterActive
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-slate-900 text-slate-400 hover:text-white border border-white/5'
+                }`}
+              >
+                <span>{stage.displayName}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                  isFilterActive ? 'bg-blue-800 text-blue-200' : 'bg-slate-800 text-slate-400'
+                }`}>
+                  {count}
+                </span>
+                {stage.status === 'ACTIVE' && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Matches List */}
       <div className="space-y-4">
-        {matches.length === 0 ? (
+        {filteredMatches.length === 0 ? (
           <div className="py-16 text-center text-slate-500 border border-dashed border-white/10 rounded-2xl bg-slate-900/40">
             <Swords className="w-10 h-10 mx-auto text-slate-600 mb-2" />
-            <p className="text-sm font-semibold text-slate-400">No matches generated yet.</p>
+            <p className="text-sm font-semibold text-slate-400">No matches found in this stage.</p>
             <p className="text-xs text-slate-500 mt-1">
-              Go to Bracket menu and start Round 1.
+              Select another stage or view All Stages.
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {matches.map((match) => {
+            {filteredMatches.map((match) => {
               const isLive = match.status === 'LIVE';
               const isCompleted = match.status === 'COMPLETED';
               const isBye = match.status === 'BYE';

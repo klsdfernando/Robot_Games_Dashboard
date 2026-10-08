@@ -379,6 +379,43 @@ export async function fetchRaceTeamsFromSupabase(division?: 'ALL' | 'SCHOOL' | '
  * Fetches race schedule slots from Supabase cloud database.
  */
 export async function fetchRaceScheduleFromSupabase(division?: 'ALL' | 'SCHOOL' | 'UNIVERSITY'): Promise<RaceScheduleSlot[]> {
+  // If PostgreSQL pool is available, query directly from Postgres
+  if (process.env.DATABASE_URL) {
+    try {
+      const { queryPostgres } = await import('@/lib/pg');
+      let sql = 'SELECT * FROM public.race_schedule';
+      const params: any[] = [];
+      if (division && division !== 'ALL') {
+        sql += ' WHERE category_division = $1';
+        params.push(division);
+      }
+      sql += ' ORDER BY slot_number ASC';
+      const rows = await queryPostgres(sql, params);
+      if (rows && rows.length > 0) {
+        return rows.map((r: any) => ({
+          id: r.id,
+          teamId: r.team_id || undefined,
+          teamName: r.team_name,
+          robotName: r.robot_name || undefined,
+          organization: r.organization || undefined,
+          logoUrl: r.logo_url || undefined,
+          categoryDivision: (r.category_division === 'UNIVERSITY' ? 'UNIVERSITY' : 'SCHOOL'),
+          slotNumber: r.slot_number,
+          scheduledTime: r.scheduled_time || '09:30 AM',
+          status: r.status || 'SCHEDULED',
+          track: r.track || 'Track 1',
+          timeRecorded: r.time_recorded || undefined,
+          score: r.score !== null && r.score !== undefined ? Number(r.score) : undefined,
+          notes: r.notes || undefined,
+          createdAt: r.created_at,
+          updatedAt: r.updated_at
+        }));
+      }
+    } catch (pgErr: any) {
+      console.warn('[Postgres fetchRaceSchedule Warning]:', pgErr.message);
+    }
+  }
+
   const client = getSupabaseAdminClient();
   if (!client) return [];
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth';
 import { getTeams, createTeam, updateTeam, getCategoryById, getCategoryByName } from '@/lib/repository';
 import { resolveDriveLogoUrl } from '@/lib/logo-downloader';
+import { uploadUrlToFreeImage } from '@/lib/freeimage';
 import { syncTeamToSupabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
 
@@ -103,11 +104,20 @@ export async function POST(req: NextRequest) {
 
       let resolvedLogoUrl: string | undefined = undefined;
 
-      // Resolve Drive link to direct display URL (NO local disk downloads)
+      // Resolve and host logo to Freeimage.host CDN (iili.io)
       if (driveLink && (driveLink.startsWith('http://') || driveLink.startsWith('https://') || driveLink.length > 20)) {
-        resolvedLogoUrl = resolveDriveLogoUrl(driveLink) || driveLink;
-        if (resolvedLogoUrl) {
-          logosDownloaded++;
+        try {
+          const hosted = await uploadUrlToFreeImage(driveLink, teamName);
+          if (hosted.success && hosted.url) {
+            resolvedLogoUrl = hosted.url;
+            logosDownloaded++;
+          } else {
+            resolvedLogoUrl = resolveDriveLogoUrl(driveLink) || driveLink;
+            if (resolvedLogoUrl) logosDownloaded++;
+          }
+        } catch {
+          resolvedLogoUrl = resolveDriveLogoUrl(driveLink) || driveLink;
+          if (resolvedLogoUrl) logosDownloaded++;
         }
       }
 

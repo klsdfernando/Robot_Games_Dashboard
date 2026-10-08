@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth';
 import { setMatchWinner, correctMatchWinner, getMatchById } from '@/lib/repository';
 import db from '@/lib/db';
+import { isSupabaseConfigured, syncTournamentStateToSupabase } from '@/lib/supabase';
 
 export async function PATCH(
   req: NextRequest,
@@ -28,6 +29,9 @@ export async function PATCH(
         new Date().toISOString(),
         id
       );
+      if (isSupabaseConfigured()) {
+        syncTournamentStateToSupabase(match.categoryId).catch(() => {});
+      }
       return NextResponse.json({ success: true });
     }
 
@@ -35,6 +39,9 @@ export async function PATCH(
       const result = setMatchWinner(id, winnerTeamId, scores);
       if (!result.success) {
         return NextResponse.json({ error: result.error }, { status: 400 });
+      }
+      if (isSupabaseConfigured()) {
+        syncTournamentStateToSupabase(match.categoryId).catch(() => {});
       }
       return NextResponse.json({ success: true });
     }
@@ -63,9 +70,14 @@ export async function POST(
       return NextResponse.json({ error: 'New winner team ID is required' }, { status: 400 });
     }
 
+    const match = getMatchById(id);
     const result = correctMatchWinner(id, newWinnerTeamId);
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+
+    if (isSupabaseConfigured() && match) {
+      syncTournamentStateToSupabase(match.categoryId).catch(() => {});
     }
 
     return NextResponse.json({ success: true });

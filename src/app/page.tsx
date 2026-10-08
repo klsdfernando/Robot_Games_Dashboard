@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useTournament } from '@/context/TournamentContext';
 import MatchDetailModal from '@/components/MatchDetailModal';
+import TeamAvatar from '@/components/TeamAvatar';
 import { 
   Swords, 
   Radio, 
@@ -59,6 +60,7 @@ interface TeamFaceoffLogoProps {
   name?: string;
   cornerColor: 'red' | 'blue' | 'green';
   size?: 'lg' | 'sm';
+  badge?: string | number | null;
 }
 
 function TeamFaceoffLogo({
@@ -66,70 +68,16 @@ function TeamFaceoffLogo({
   name,
   cornerColor,
   size = 'lg',
+  badge,
 }: TeamFaceoffLogoProps) {
-  const [hasError, setHasError] = React.useState(false);
-
-  React.useEffect(() => {
-    setHasError(false);
-  }, [logoUrl]);
-
-  const initials = getTeamInitials(name);
-
-  const colorStyles = {
-    red: {
-      ring: 'ring-2 ring-red-500/60 shadow-[0_0_22px_rgba(239,68,68,0.35)]',
-      fallbackBg:
-        'bg-red-500/10 text-red-400 border border-red-500/30 ring-2 ring-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.25)]',
-    },
-    blue: {
-      ring: 'ring-2 ring-blue-500/60 shadow-[0_0_22px_rgba(59,130,246,0.35)]',
-      fallbackBg:
-        'bg-blue-500/10 text-blue-400 border border-blue-500/30 ring-2 ring-blue-500/50 shadow-[0_0_20px_rgba(59,130,246,0.25)]',
-    },
-    green: {
-      ring: 'ring-2 ring-emerald-500/60 shadow-[0_0_22px_rgba(16,185,129,0.35)]',
-      fallbackBg:
-        'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 ring-2 ring-emerald-500/50 shadow-[0_0_20px_rgba(16,185,129,0.25)]',
-    },
-  }[cornerColor];
-
-  // lg: 56px on mobile down to ~360px, 80px on sm, 96px on md+
-  // sm: 56px to 64px (w-14 h-14 sm:w-16 sm:h-16)
-  const sizeClasses =
-    size === 'lg'
-      ? 'w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24'
-      : 'w-14 h-14 sm:w-16 sm:h-16';
-
-  const fontClasses =
-    size === 'lg'
-      ? 'text-lg sm:text-2xl font-black font-mono tracking-wider'
-      : 'text-sm sm:text-base font-black font-mono tracking-wider';
-
-  if (!logoUrl || hasError) {
-    return (
-      <div
-        className={`rounded-full flex items-center justify-center shrink-0 select-none ${sizeClasses} ${colorStyles.fallbackBg} ${fontClasses}`}
-        aria-label={name || 'Team Initials'}
-      >
-        <span>{initials}</span>
-      </div>
-    );
-  }
-
   return (
-    <div
-      className={`relative rounded-full bg-[#080d18] shrink-0 overflow-hidden flex items-center justify-center ${sizeClasses} ${colorStyles.ring}`}
-    >
-      <Image
-        src={logoUrl}
-        alt={name || 'Team logo'}
-        fill
-        unoptimized
-        sizes={size === 'lg' ? '(min-width: 768px) 96px, 80px' : '(min-width: 640px) 64px, 56px'}
-        className="object-contain p-2"
-        onError={() => setHasError(true)}
-      />
-    </div>
+    <TeamAvatar
+      logoUrl={logoUrl}
+      name={name}
+      cornerColor={cornerColor}
+      size={size === 'lg' ? 'hero' : 'lg'}
+      badge={badge}
+    />
   );
 }
 
@@ -387,27 +335,22 @@ export default function HomePage() {
                     const p2 = liveMatch.participants[1];
 
                     return (
-                      <div className="grid grid-cols-1 min-[360px]:grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-4 my-auto py-2">
+                      <div className="grid grid-cols-1 min-[400px]:grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-4 my-auto py-2">
                         {/* Team #1 */}
-                        <div className="relative flex flex-col items-center justify-center p-3.5 sm:p-5 rounded-2xl bg-[#080d18]/70 border border-white/5 overflow-hidden transition-colors w-full h-full min-w-0">
+                        <div className="relative flex flex-col items-center justify-center pt-5 sm:pt-6 pb-4 sm:pb-5 px-3 sm:px-5 rounded-2xl bg-[#080d18]/70 border border-white/5 transition-colors w-full h-full min-w-0">
                           {/* Top edge accent (red) */}
-                          <div className="absolute top-0 inset-x-0 h-1 bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.7)]" />
+                          <div className="absolute top-0 inset-x-0 h-1 bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.7)] rounded-t-2xl" />
 
-                          {/* Small #1 badge above logo */}
-                          <span className="inline-flex items-center justify-center px-2 py-0.5 mb-2 sm:mb-2.5 rounded-full text-xs font-bold tracking-wider uppercase bg-red-500/15 text-red-400 border border-red-500/30">
-                            #<span className="font-mono">1</span>
-                          </span>
-
-                          {/* Logo on top */}
-                          <TeamFaceoffLogo
+                          {/* Avatar without badge */}
+                          <TeamAvatar
                             logoUrl={p1?.team?.logoUrl}
                             name={p1?.team?.name}
                             cornerColor="red"
-                            size="lg"
+                            size="hero"
                           />
 
                           {/* Team name directly below in large bold type */}
-                          <div className="mt-3 sm:mt-3.5 w-full min-w-0 flex items-center justify-center min-h-[2.5rem] sm:min-h-[3rem]">
+                          <div className="mt-3.5 sm:mt-4 w-full min-w-0 flex items-center justify-center min-h-[2.5rem] sm:min-h-[3rem]">
                             <span className={`font-black text-white tracking-tight leading-snug break-words text-center ${getLiveNameSize(p1?.team?.name || '')}`}>
                               {p1?.team?.name || 'TBD Team'}
                             </span>
@@ -415,34 +358,29 @@ export default function HomePage() {
                         </div>
 
                         {/* Center Column: circular VS badge with thin fading vertical lines */}
-                        <div className="flex min-[360px]:flex-col items-center justify-center self-stretch py-2 min-[360px]:py-0 px-1 sm:px-3">
-                          <div className="h-px min-[360px]:h-auto min-[360px]:w-px flex-1 bg-gradient-to-r min-[360px]:bg-gradient-to-b from-transparent via-white/20 to-white/40" />
-                          <div className="mx-2 min-[360px]:mx-0 min-[360px]:my-2 sm:min-[360px]:my-3.5 flex items-center justify-center shrink-0 w-8 h-8 sm:w-11 sm:h-11 rounded-full bg-[#080d18] border border-white/20 shadow-xl text-slate-300 font-black font-mono text-xs sm:text-sm tracking-wider">
+                        <div className="flex min-[400px]:flex-col items-center justify-center self-stretch py-2 min-[400px]:py-0 px-1 sm:px-3">
+                          <div className="h-px min-[400px]:h-auto min-[400px]:w-px flex-1 bg-gradient-to-r min-[400px]:bg-gradient-to-b from-transparent via-white/20 to-white/40" />
+                          <div className="mx-2 min-[400px]:mx-0 min-[400px]:my-2 sm:min-[400px]:my-3.5 flex items-center justify-center shrink-0 w-8 h-8 sm:w-11 sm:h-11 rounded-full bg-[#080d18] border border-white/20 shadow-xl text-slate-300 font-black font-mono text-xs sm:text-sm tracking-wider">
                             VS
                           </div>
-                          <div className="h-px min-[360px]:h-auto min-[360px]:w-px flex-1 bg-gradient-to-r min-[360px]:bg-gradient-to-b from-white/40 via-white/20 to-transparent" />
+                          <div className="h-px min-[400px]:h-auto min-[400px]:w-px flex-1 bg-gradient-to-r min-[400px]:bg-gradient-to-b from-white/40 via-white/20 to-transparent" />
                         </div>
 
                         {/* Team #2 */}
-                        <div className="relative flex flex-col items-center justify-center p-3.5 sm:p-5 rounded-2xl bg-[#080d18]/70 border border-white/5 overflow-hidden transition-colors w-full h-full min-w-0">
+                        <div className="relative flex flex-col items-center justify-center pt-5 sm:pt-6 pb-4 sm:pb-5 px-3 sm:px-5 rounded-2xl bg-[#080d18]/70 border border-white/5 transition-colors w-full h-full min-w-0">
                           {/* Top edge accent (blue) */}
-                          <div className="absolute top-0 inset-x-0 h-1 bg-blue-500 shadow-[0_0_12px_rgba(59,130,246,0.7)]" />
+                          <div className="absolute top-0 inset-x-0 h-1 bg-blue-500 shadow-[0_0_12px_rgba(59,130,246,0.7)] rounded-t-2xl" />
 
-                          {/* Small #2 badge above logo */}
-                          <span className="inline-flex items-center justify-center px-2 py-0.5 mb-2 sm:mb-2.5 rounded-full text-xs font-bold tracking-wider uppercase bg-blue-500/15 text-blue-400 border border-blue-500/30">
-                            #<span className="font-mono">2</span>
-                          </span>
-
-                          {/* Logo on top */}
-                          <TeamFaceoffLogo
+                          {/* Avatar without badge */}
+                          <TeamAvatar
                             logoUrl={p2?.team?.logoUrl}
                             name={p2?.team?.name}
                             cornerColor="blue"
-                            size="lg"
+                            size="hero"
                           />
 
                           {/* Team name directly below in large bold type */}
-                          <div className="mt-3 sm:mt-3.5 w-full min-w-0 flex items-center justify-center min-h-[2.5rem] sm:min-h-[3rem]">
+                          <div className="mt-3.5 sm:mt-4 w-full min-w-0 flex items-center justify-center min-h-[2.5rem] sm:min-h-[3rem]">
                             <span className={`font-black text-white tracking-tight leading-snug break-words text-center ${getLiveNameSize(p2?.team?.name || '')}`}>
                               {p2?.team?.name || 'TBD Team'}
                             </span>
@@ -453,7 +391,7 @@ export default function HomePage() {
                   })()}
 
                   {/* Broadcast Footer */}
-                  <div className="mt-4 pt-3.5 border-t border-white/10 flex items-center justify-between gap-3 text-xs">
+                  <div className="mt-4 pt-3.5 border-t border-white/10 flex flex-col min-[480px]:flex-row items-center justify-center min-[480px]:justify-between gap-3 text-xs text-center min-[480px]:text-left">
                     <div className="flex items-center gap-2">
                       <Radio className="w-3.5 h-3.5 text-red-400 animate-pulse shrink-0" />
                       <span className="font-bold uppercase tracking-wide text-white">
@@ -491,9 +429,6 @@ export default function HomePage() {
                   <h3 className="text-xs font-extrabold uppercase tracking-wider text-blue-400">
                     UP NEXT IN ARENA
                   </h3>
-                  <span className="text-xs font-semibold text-blue-300 bg-blue-500/15 border border-blue-400/30 px-2.5 py-1 rounded-md">
-                    Starts in ~<span className="font-mono font-bold text-blue-200">10</span> min
-                  </span>
                 </div>
                 {upNextMatch && (
                   <span className="text-xs font-bold text-slate-300">
@@ -523,25 +458,19 @@ export default function HomePage() {
                                     VS
                                   </div>
                                 )}
-                                <div className="relative flex flex-col items-center justify-center p-3 sm:p-3.5 rounded-xl bg-[#080d18]/70 border border-white/5 overflow-hidden transition-colors flex-1 min-w-[105px] max-w-[155px]">
+                                <div className="relative flex flex-col items-center justify-center pt-4 sm:pt-5 pb-3 sm:pb-4 px-2 sm:px-3 rounded-xl bg-[#080d18]/70 border border-white/5 transition-colors flex-1 min-w-[105px] max-w-[155px]">
                                   {/* Top accent */}
-                                  <div className={`absolute top-0 inset-x-0 h-1 ${getCornerBorderClass(idx)}`} />
+                                  <div className={`absolute top-0 inset-x-0 h-1 ${getCornerBorderClass(idx)} rounded-t-xl`} />
 
-                                  {/* Badge */}
-                                  <span className={`inline-flex items-center justify-center px-1.5 py-0.5 mb-1.5 rounded-full text-xs font-bold tracking-wider uppercase ${getCornerBadgeStyle(idx)}`}>
-                                    #<span className="font-mono">{idx + 1}</span>
-                                  </span>
-
-                                  {/* Logo 56-64px */}
-                                  <TeamFaceoffLogo
+                                  <TeamAvatar
                                     logoUrl={p.team?.logoUrl}
                                     name={p.team?.name}
                                     cornerColor={corner}
-                                    size="sm"
+                                    size="lg"
                                   />
 
                                   {/* Team name */}
-                                  <div className="mt-2.5 w-full min-w-0 flex items-center justify-center min-h-[2.25rem] sm:min-h-[2.5rem]">
+                                  <div className="mt-2.5 sm:mt-3 w-full min-w-0 flex items-center justify-center min-h-[2.25rem] sm:min-h-[2.5rem]">
                                     <span className={`font-black text-white tracking-tight leading-snug break-words text-center ${getUpNextNameSize(p.team?.name || '')}`}>
                                       {p.team?.name || ''}
                                     </span>
@@ -559,23 +488,19 @@ export default function HomePage() {
                     const p2 = validParticipants[1] || upNextMatch.participants[1];
 
                     return (
-                      <div className="grid grid-cols-1 min-[360px]:grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-3 my-auto py-2">
+                      <div className="grid grid-cols-1 min-[400px]:grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-3 my-auto py-2">
                         {/* Team #1 */}
-                        <div className="relative flex flex-col items-center justify-center p-3 sm:p-4 rounded-xl bg-[#080d18]/70 border border-white/5 overflow-hidden transition-colors w-full h-full min-w-0">
-                          <div className="absolute top-0 inset-x-0 h-1 bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.6)]" />
+                        <div className="relative flex flex-col items-center justify-center pt-5 sm:pt-6 pb-4 sm:pb-5 px-3 sm:px-4 rounded-xl bg-[#080d18]/70 border border-white/5 transition-colors w-full h-full min-w-0">
+                          <div className="absolute top-0 inset-x-0 h-1 bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.6)] rounded-t-xl" />
 
-                          <span className="inline-flex items-center justify-center px-2 py-0.5 mb-2 rounded-full text-xs font-bold tracking-wider uppercase bg-red-500/15 text-red-400 border border-red-500/30">
-                            #<span className="font-mono">1</span>
-                          </span>
-
-                          <TeamFaceoffLogo
+                          <TeamAvatar
                             logoUrl={p1?.team?.logoUrl}
                             name={p1?.team?.name}
                             cornerColor="red"
-                            size="sm"
+                            size="hero"
                           />
 
-                          <div className="mt-2.5 sm:mt-3 w-full min-w-0 flex items-center justify-center min-h-[2.25rem] sm:min-h-[2.5rem]">
+                          <div className="mt-3.5 sm:mt-4 w-full min-w-0 flex items-center justify-center min-h-[2.25rem] sm:min-h-[2.5rem]">
                             <span className={`font-black text-white tracking-tight leading-snug break-words text-center ${getUpNextNameSize(p1?.team?.name || '')}`}>
                               {p1?.team?.name || 'TBD Team'}
                             </span>
@@ -583,30 +508,26 @@ export default function HomePage() {
                         </div>
 
                         {/* Center VS */}
-                        <div className="flex min-[360px]:flex-col items-center justify-center self-stretch py-1.5 min-[360px]:py-0 px-1 sm:px-2">
-                          <div className="h-px min-[360px]:h-auto min-[360px]:w-px flex-1 bg-gradient-to-r min-[360px]:bg-gradient-to-b from-transparent via-white/20 to-white/30" />
-                          <div className="mx-1.5 min-[360px]:mx-0 min-[360px]:my-1.5 sm:min-[360px]:my-2 flex items-center justify-center shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#080d18] border border-white/20 shadow-md text-slate-300 font-black font-mono text-xs tracking-wider">
+                        <div className="flex min-[400px]:flex-col items-center justify-center self-stretch py-1.5 min-[400px]:py-0 px-1 sm:px-2">
+                          <div className="h-px min-[400px]:h-auto min-[400px]:w-px flex-1 bg-gradient-to-r min-[400px]:bg-gradient-to-b from-transparent via-white/20 to-white/30" />
+                          <div className="mx-1.5 min-[400px]:mx-0 min-[400px]:my-1.5 sm:min-[400px]:my-2 flex items-center justify-center shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#080d18] border border-white/20 shadow-md text-slate-300 font-black font-mono text-xs tracking-wider">
                             VS
                           </div>
-                          <div className="h-px min-[360px]:h-auto min-[360px]:w-px flex-1 bg-gradient-to-r min-[360px]:bg-gradient-to-b from-white/30 via-white/20 to-transparent" />
+                          <div className="h-px min-[400px]:h-auto min-[400px]:w-px flex-1 bg-gradient-to-r min-[400px]:bg-gradient-to-b from-white/30 via-white/20 to-transparent" />
                         </div>
 
                         {/* Team #2 */}
-                        <div className="relative flex flex-col items-center justify-center p-3 sm:p-4 rounded-xl bg-[#080d18]/70 border border-white/5 overflow-hidden transition-colors w-full h-full min-w-0">
-                          <div className="absolute top-0 inset-x-0 h-1 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.6)]" />
+                        <div className="relative flex flex-col items-center justify-center pt-5 sm:pt-6 pb-4 sm:pb-5 px-3 sm:px-4 rounded-xl bg-[#080d18]/70 border border-white/5 transition-colors w-full h-full min-w-0">
+                          <div className="absolute top-0 inset-x-0 h-1 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.6)] rounded-t-xl" />
 
-                          <span className="inline-flex items-center justify-center px-2 py-0.5 mb-2 rounded-full text-xs font-bold tracking-wider uppercase bg-blue-500/15 text-blue-400 border border-blue-500/30">
-                            #<span className="font-mono">2</span>
-                          </span>
-
-                          <TeamFaceoffLogo
+                          <TeamAvatar
                             logoUrl={p2?.team?.logoUrl}
                             name={p2?.team?.name}
                             cornerColor="blue"
-                            size="sm"
+                            size="hero"
                           />
 
-                          <div className="mt-2.5 sm:mt-3 w-full min-w-0 flex items-center justify-center min-h-[2.25rem] sm:min-h-[2.5rem]">
+                          <div className="mt-3.5 sm:mt-4 w-full min-w-0 flex items-center justify-center min-h-[2.25rem] sm:min-h-[2.5rem]">
                             <span className={`font-black text-white tracking-tight leading-snug break-words text-center ${getUpNextNameSize(p2?.team?.name || '')}`}>
                               {p2?.team?.name || 'TBD Team'}
                             </span>
@@ -617,7 +538,7 @@ export default function HomePage() {
                   })()}
 
                   {/* High-Contrast Status Chip and Footer */}
-                  <div className="mt-4 pt-3.5 border-t border-white/10 flex items-center justify-between gap-3 text-xs">
+                  <div className="mt-4 pt-3.5 border-t border-white/10 flex flex-col min-[480px]:flex-row items-center justify-center min-[480px]:justify-between gap-3 text-xs text-center min-[480px]:text-left">
                     <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-500/20 text-blue-200 border border-blue-400/40 text-xs font-bold tracking-wide uppercase">
                       <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
                       <span>On Deck · Pre-Match Inspection</span>
@@ -643,7 +564,7 @@ export default function HomePage() {
       )}
 
       {/* Tournament Quick Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         {/* Tile 1: Matches Completed with progress bar */}
         <div className="p-4 rounded-2xl bg-slate-900/60 border border-white/10 flex flex-col gap-1.5">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
@@ -695,15 +616,6 @@ export default function HomePage() {
             {overview?.currentStageDisplayName ?? '—'}
           </span>
           <span className="text-xs text-slate-400 mt-auto">Active stage</span>
-        </div>
-
-        {/* Tile 4: Next Break / Finals Time — no field exists in TournamentOverview */}
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-white/10 flex flex-col gap-1.5 opacity-60">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
-            Next Break
-          </span>
-          <span className="text-2xl font-black font-mono text-slate-500 leading-none">—</span>
-          <span className="text-xs text-slate-500 mt-auto">Not scheduled</span>
         </div>
       </div>
 

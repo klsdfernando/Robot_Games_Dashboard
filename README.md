@@ -108,11 +108,11 @@ ROUND 1 (1v1 battles + odd-count BYE)
 │   ├── components/              # Shared UI components
 │   │   ├── ChampionBanner.tsx   # Celebratory champion announcement
 │   │   ├── Footer.tsx           # Public footer
-│   │   ├── GraphicalBracket.tsx # Desktop & mobile graphical bracket
+│   │   ├── TournamentTreeGraph.tsx # Desktop & mobile graphical bracket tree graph
 │   │   ├── MatchCard.tsx        # Scalable 2/3-player match card
 │   │   ├── MatchDetailModal.tsx # Match inspection dialog
-│   │   ├── Navbar.tsx           # Navigation bar with category switcher
-│   │   └── TournamentProgressStepper.tsx # Stage progress tracker
+│   │   ├── ImageUploader.tsx    # Drag-and-drop cloud & CDN image uploader
+│   │   └── Navbar.tsx           # Navigation bar with category switcher
 │   ├── context/
 │   │   └── TournamentContext.tsx# Real-time state provider & polling client
 │   └── lib/
@@ -150,7 +150,7 @@ Open **[http://localhost:3001](http://localhost:3001)** in your browser.
 
 ## 🔐 Organizer Access
 
-Configure `ADMIN_PASSKEY_HASH` and `ADMIN_JWT_SECRET` in `.env.local`. The private route and passkey should be shared with authorized event staff only and must not be committed to source control.
+Configure `ADMIN_PASSWORD` and `ADMIN_JWT_SECRET` in `.env.local`. The private route and password should be shared with authorized event staff only and must not be committed to source control.
 
 ---
 

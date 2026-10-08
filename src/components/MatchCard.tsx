@@ -3,6 +3,7 @@
 import React from 'react';
 import { Match } from '@/lib/types';
 import { Trophy, Check, ArrowRight } from 'lucide-react';
+import TeamAvatar from './TeamAvatar';
 
 interface MatchCardProps {
   match: Match;
@@ -97,6 +98,8 @@ export default function MatchCard({ match, onClick, compact = false }: MatchCard
               isEmpty: !p.teamId,
               name: p.team?.name || '',
               score: p.score,
+              logoUrl: p.team?.logoUrl,
+              seed: p.team?.seed,
               isWinner: isCompleted && p.teamId === match.winnerTeamId
             }));
 
@@ -108,6 +111,8 @@ export default function MatchCard({ match, onClick, compact = false }: MatchCard
                 isEmpty: true,
                 name: '',
                 score: null,
+                logoUrl: undefined,
+                seed: undefined,
                 isWinner: false
               });
             }
@@ -139,9 +144,11 @@ export default function MatchCard({ match, onClick, compact = false }: MatchCard
                   }`}
                 >
                   <div className="flex items-center gap-2 truncate pr-2">
-                    <span className="text-[10px] font-mono text-slate-500">
-                      {idx + 1}.
-                    </span>
+                    <TeamAvatar
+                      logoUrl={p.logoUrl}
+                      name={p.name}
+                      size="xs"
+                    />
                     <div className="truncate">
                       <div className="flex items-center gap-1.5 truncate">
                         <span className="truncate block font-medium">

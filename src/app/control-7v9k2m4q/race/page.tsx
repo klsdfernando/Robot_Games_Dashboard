@@ -36,6 +36,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { RaceScheduleSlot, RaceSlotStatus, Team, RaceCategoryDivision } from '@/lib/types';
+import ImageUploader from '@/components/ImageUploader';
 
 export default function AdminRobotRacePage() {
   const [schedule, setSchedule] = useState<RaceScheduleSlot[]>([]);
@@ -177,9 +178,30 @@ export default function AdminRobotRacePage() {
     }
   };
 
-  const handleSyncSupabase = async () => {
-    setSupabaseSyncing(true);
-    setError(null);
+  // Auto-sync state
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
+  const [autoSyncing, setAutoSyncing] = useState(false);
+  const [lastSyncedTime, setLastSyncedTime] = useState<string>('');
+
+  // Read saved preference on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('rg_race_autosync_enabled');
+      if (saved !== null) {
+        setAutoSyncEnabled(saved === 'true');
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const triggerAutoSync = async (silent = true) => {
+    if (supabaseSyncing || autoSyncing) return;
+    if (silent) {
+      setAutoSyncing(true);
+    } else {
+      setSupabaseSyncing(true);
+    }
     try {
       const res = await fetch('/api/admin/supabase', {
         method: 'POST',
@@ -187,15 +209,59 @@ export default function AdminRobotRacePage() {
         body: JSON.stringify({ action: 'sync_all' })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to sync to Supabase');
-      setSuccess(data.message || 'Successfully synced data to Supabase cloud database!');
-      await checkSupabaseStatus();
+      if (res.ok) {
+        const now = new Date();
+        setLastSyncedTime(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        if (!silent) {
+          setSuccess(data.message || 'Successfully synced data to Supabase cloud database!');
+        }
+      } else if (!silent) {
+        throw new Error(data.error || 'Failed to sync to Supabase');
+      }
     } catch (err: any) {
-      setError(err.message || 'Supabase sync failed');
+      if (!silent) {
+        setError(err.message || 'Supabase sync failed');
+      }
     } finally {
-      setSupabaseSyncing(false);
+      if (silent) setAutoSyncing(false);
+      else setSupabaseSyncing(false);
     }
   };
+
+  const toggleAutoSync = () => {
+    const nextVal = !autoSyncEnabled;
+    setAutoSyncEnabled(nextVal);
+    try {
+      localStorage.setItem('rg_race_autosync_enabled', String(nextVal));
+    } catch {
+      // ignore
+    }
+    if (nextVal) {
+      triggerAutoSync(false);
+    }
+  };
+
+  const handleSyncSupabase = async () => {
+    await triggerAutoSync(false);
+    await checkSupabaseStatus();
+  };
+
+  // Periodic automatic sync every 25 seconds
+  useEffect(() => {
+    if (!autoSyncEnabled) return;
+    const initialTimer = setTimeout(() => {
+      triggerAutoSync(true);
+    }, 2500);
+
+    const interval = setInterval(() => {
+      triggerAutoSync(true);
+    }, 25000);
+
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(interval);
+    };
+  }, [autoSyncEnabled]);
 
   useEffect(() => {
     fetchRaceTeams();
@@ -870,18 +936,50 @@ export default function AdminRobotRacePage() {
                       Cloud DB Ready
                     </span>
                   )}
+                  {/* Auto-Sync Live Status Indicator */}
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border flex items-center gap-1.5 transition-all ${
+                    autoSyncEnabled
+                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 shadow-sm shadow-emerald-500/10'
+                      : 'bg-slate-800 text-slate-400 border-white/10'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${
+                      autoSyncEnabled
+                        ? (autoSyncing ? 'bg-emerald-400 animate-ping' : 'bg-emerald-400 animate-pulse')
+                        : 'bg-slate-500'
+                    }`} />
+                    {autoSyncing ? 'Auto-Syncing...' : (autoSyncEnabled ? 'Auto-Sync Active' : 'Auto-Sync Paused')}
+                    {lastSyncedTime && !autoSyncing && autoSyncEnabled && (
+                      <span className="text-[9px] font-normal text-emerald-300/80 lowercase">({lastSyncedTime})</span>
+                    )}
+                  </span>
                 </div>
                 <p className="text-[11px] text-slate-400 mt-0.5">
                   Stores team names, Google Drive logo URLs, and category divisions directly in your database.
+                  {autoSyncEnabled ? ' Real-time auto-sync runs continuously in the background.' : ' Automatic sync is currently paused.'}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 self-stretch sm:self-auto shrink-0">
+            <div className="flex items-center gap-2 self-stretch sm:self-auto shrink-0 flex-wrap">
+              {/* Auto Sync Toggle Button */}
+              <button
+                type="button"
+                onClick={toggleAutoSync}
+                title={autoSyncEnabled ? 'Pause background auto-sync' : 'Enable continuous background auto-sync'}
+                className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 ${
+                  autoSyncEnabled
+                    ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25 shadow-sm'
+                    : 'bg-white/5 border-white/10 text-slate-400 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${autoSyncing ? 'animate-spin text-emerald-400' : ''}`} />
+                <span>Auto-Sync: {autoSyncEnabled ? 'ON' : 'OFF'}</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setIsSupabaseModalOpen(true)}
-                className="flex-1 sm:flex-initial px-3 py-2 rounded-xl text-xs font-bold bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 transition-colors flex items-center justify-center gap-1.5"
+                className="px-3 py-2 rounded-xl text-xs font-bold bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 transition-colors flex items-center justify-center gap-1.5"
               >
                 <span>Supabase Setup</span>
               </button>
@@ -889,8 +987,8 @@ export default function AdminRobotRacePage() {
               <button
                 type="button"
                 onClick={handleSyncSupabase}
-                disabled={supabaseSyncing}
-                className="flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-blue-500 to-blue-400 hover:brightness-110 text-black shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-1.5 disabled:opacity-60"
+                disabled={supabaseSyncing || autoSyncing}
+                className="px-4 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-blue-500 to-blue-400 hover:brightness-110 text-black shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-1.5 disabled:opacity-60"
               >
                 {supabaseSyncing ? (
                   <>
@@ -1644,26 +1742,12 @@ export default function AdminRobotRacePage() {
                 />
               </div>
 
-              {/* Google Drive Link / Logo URL */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <LinkIcon className="w-3.5 h-3.5 text-blue-400" />
-                    Team Logo Google Drive Link / URL
-                  </span>
-                  <span className="text-[10px] text-blue-400 font-semibold">Saves URL to Database</span>
-                </label>
-                <input
-                  type="text"
-                  value={teamFormDriveLink}
-                  onChange={(e) => setTeamFormDriveLink(e.target.value)}
-                  placeholder="https://drive.google.com/file/d/1.../view?usp=sharing"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/10 text-white text-xs focus:outline-none focus:border-blue-400"
-                />
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Paste any public Google Drive link or image URL. The URL is stored directly in the database without saving local files.
-                </p>
-              </div>
+              <ImageUploader
+                value={teamFormDriveLink}
+                onChange={setTeamFormDriveLink}
+                label="Team Logo (Freeimage CDN / Drive Link)"
+                description="Upload an image directly or paste any Drive link to automatically host onto high-speed CDN."
+              />
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">

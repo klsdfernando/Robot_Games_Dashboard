@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Match, MatchParticipant, TournamentStage, TournamentOverview } from '@/lib/types';
+import { Match, MatchParticipant, TournamentStage, TournamentOverview, Team } from '@/lib/types';
 import {
   Trophy,
   Flame,
@@ -12,11 +12,13 @@ import {
   GitBranch,
   Crown
 } from 'lucide-react';
+import TeamAvatar from './TeamAvatar';
 
 interface TournamentTreeGraphProps {
   stages: TournamentStage[];
   matches: Match[];
   overview: TournamentOverview | null;
+  teams?: Team[];
   onSelectMatch: (match: Match) => void;
 }
 
@@ -65,10 +67,20 @@ export default function TournamentTreeGraph({
   stages,
   matches,
   overview,
+  teams = [],
   onSelectMatch
 }: TournamentTreeGraphProps) {
   const [hoveredTeamName, setHoveredTeamName] = useState<string | null>(null);
   const [trackFilter, setTrackFilter] = useState<'ALL' | 'WINNERS' | 'WILDCARD'>('ALL');
+
+  const teamsMap = useMemo(() => {
+    const map = new Map<string, Team>();
+    for (const t of teams) {
+      if (t.id) map.set(t.id, t);
+      if (t.name) map.set(t.name.toLowerCase().trim(), t);
+    }
+    return map;
+  }, [teams]);
 
   // Group existing generated matches by stage in chronological stage order
   const stageColumns: StageColumn[] = useMemo(() => {
@@ -151,14 +163,26 @@ export default function TournamentTreeGraph({
 
         const makeTeamBox = (p: MatchParticipant | undefined, slotNumber: number): TeamBoxData => {
           const isEmpty = !p || !p.team?.id;
+          const fallbackTeam = p?.teamId
+            ? teamsMap.get(p.teamId)
+            : p?.team?.name
+            ? teamsMap.get(p.team.name.toLowerCase().trim())
+            : undefined;
+          const logoUrl = p?.team?.logoUrl || fallbackTeam?.logoUrl;
+          const seed = p?.team?.seed !== undefined && p?.team?.seed !== null
+            ? p.team.seed
+            : fallbackTeam?.seed !== undefined && fallbackTeam?.seed !== null
+            ? fallbackTeam.seed
+            : undefined;
+
           return {
-            id: p?.team?.id,
-            name: p?.team?.name || '',
-            logoUrl: p?.team?.logoUrl,
+            id: p?.team?.id || p?.teamId || undefined,
+            name: p?.team?.name || fallbackTeam?.name || '',
+            logoUrl: logoUrl || undefined,
             score: p?.score,
             isWinner: Boolean(p?.isWinner || (p?.teamId && m.winnerTeamId === p.teamId)),
             isBye: isBye && slotNumber === 1,
-            seed: p?.team?.seed,
+            seed,
             matchId: m.id,
             status: m.status,
             advancementSource: p?.advancementSource,
@@ -183,10 +207,11 @@ export default function TournamentTreeGraph({
 
         let winnerTeam: TeamBoxData | undefined = undefined;
         if (m.winnerTeam) {
+          const fallbackWTeam = teamsMap.get(m.winnerTeam.id) || teamsMap.get(m.winnerTeam.name.toLowerCase().trim());
           winnerTeam = {
             id: m.winnerTeam.id,
             name: m.winnerTeam.name,
-            logoUrl: m.winnerTeam.logoUrl,
+            logoUrl: m.winnerTeam.logoUrl || fallbackWTeam?.logoUrl,
             isWinner: true,
             matchId: m.id,
             status: m.status,
@@ -230,6 +255,9 @@ export default function TournamentTreeGraph({
 
         directByeParticipants.forEach((participant, index) => {
           const team = participant.team!;
+          const fallbackTeam = teamsMap.get(team.id) || teamsMap.get(team.name.toLowerCase().trim());
+          const logoUrl = team.logoUrl || fallbackTeam?.logoUrl;
+          const seed = team.seed !== undefined && team.seed !== null ? team.seed : fallbackTeam?.seed;
           matchNodes.push({
             matchId: `display-bye-${team.id}`,
             matchNumber: stageMatches.length + index + 1,
@@ -239,8 +267,8 @@ export default function TournamentTreeGraph({
             topTeam: {
               id: team.id,
               name: team.name,
-              logoUrl: team.logoUrl,
-              seed: team.seed,
+              logoUrl: logoUrl || undefined,
+              seed,
               isWinner: true,
               isBye: true,
               status: 'BYE',
@@ -248,14 +276,64 @@ export default function TournamentTreeGraph({
             winnerTeam: {
               id: team.id,
               name: team.name,
-              logoUrl: team.logoUrl,
-              seed: team.seed,
+              logoUrl: logoUrl || undefined,
+              seed,
               isWinner: true,
               isBye: true,
               status: 'BYE',
             },
           });
         });
+
+        // Bracket-align Round 1 matches so they order by their Quarterfinal destination match and slot
+        const qfMatches = (stageMap.get('QUARTERFINAL') || [])
+          .slice()
+          .sort((a, b) => a.matchNumber - b.matchNumber);
+
+        if (qfMatches.length > 0) {
+          const qfOrderMap = new Map<string, { qfNum: number; slot: number }>();
+          qfMatches.forEach(qf => {
+            qf.participants.forEach(p => {
+              if (p.sourceMatchId) {
+                qfOrderMap.set(p.sourceMatchId, {
+                  qfNum: qf.matchNumber,
+                  slot: p.participantOrder || 1
+                });
+              }
+              if (p.team?.id) {
+                qfOrderMap.set(`team-${p.team.id}`, {
+                  qfNum: qf.matchNumber,
+                  slot: p.participantOrder || 1
+                });
+              }
+            });
+          });
+
+          matchNodes.sort((a, b) => {
+            const getInfo = (node: MatchPairNode) => {
+              const rawId = node.rawMatch?.id || node.matchId;
+              const byId = qfOrderMap.get(rawId) || qfOrderMap.get(node.matchId);
+              if (byId) return byId;
+
+              if (node.topTeam.id && qfOrderMap.has(`team-${node.topTeam.id}`)) {
+                return qfOrderMap.get(`team-${node.topTeam.id}`)!;
+              }
+
+              if (node.rawMatch?.nextMatchId) {
+                const qf = qfMatches.find(q => q.id === node.rawMatch?.nextMatchId);
+                if (qf) return { qfNum: qf.matchNumber, slot: 99 };
+              }
+
+              return { qfNum: 999, slot: node.matchNumber };
+            };
+
+            const infoA = getInfo(a);
+            const infoB = getInfo(b);
+            if (infoA.qfNum !== infoB.qfNum) return infoA.qfNum - infoB.qfNum;
+            if (infoA.slot !== infoB.slot) return infoA.slot - infoB.slot;
+            return a.matchNumber - b.matchNumber;
+          });
+        }
 
         const byeCount = matchNodes.filter((match) => match.status === 'BYE').length;
         if (byeCount > 0) {
@@ -274,7 +352,7 @@ export default function TournamentTreeGraph({
         matches: matchNodes
       };
     });
-  }, [matches, stages]);
+  }, [matches, stages, teamsMap]);
 
   // Separate stages into Winners Track, Wildcard Track, and Finals
   const winnersStages = useMemo(() => {
@@ -383,8 +461,8 @@ export default function TournamentTreeGraph({
                   />
                   {colIdx < winnersStages.length - 1 && (
                     <WinnersTreeConnector
-                      prevMatchesCount={col.matches.length}
-                      nextMatchesCount={winnersStages[colIdx + 1].matches.length}
+                      prevCol={col}
+                      nextCol={winnersStages[colIdx + 1]}
                       isCompleted={col.isCompleted}
                     />
                   )}
@@ -436,8 +514,8 @@ export default function TournamentTreeGraph({
                   />
                   {colIdx < wildcardStages.length - 1 && (
                     <WildcardTreeConnector
-                      prevMatchesCount={col.matches.length}
-                      nextMatchesCount={wildcardStages[colIdx + 1].matches.length}
+                      prevCol={col}
+                      nextCol={wildcardStages[colIdx + 1]}
                       isCompleted={col.isCompleted}
                     />
                   )}
@@ -594,37 +672,200 @@ function StageTreeColumn({
 /* WINNERS TREE CONNECTOR COMPONENT (AUTHENTIC TREE BRACKET FORKS)            */
 /* ========================================================================== */
 
-function WinnersTreeConnector({
-  prevMatchesCount,
-  nextMatchesCount,
-  isCompleted
-}: {
-  prevMatchesCount: number;
-  nextMatchesCount: number;
+interface TreeConnectorProps {
+  prevCol: StageColumn;
+  nextCol: StageColumn;
   isCompleted: boolean;
-}) {
-  const isBinaryFork = prevMatchesCount === nextMatchesCount * 2;
+  trackType?: 'WINNERS' | 'WILDCARD';
+}
+
+function TreeConnector({
+  prevCol,
+  nextCol,
+  isCompleted,
+  trackType
+}: TreeConnectorProps) {
+  const prevMatches = prevCol.matches;
+  const nextMatches = nextCol.matches;
+  const prevCount = prevMatches.length;
+  const nextCount = nextMatches.length;
+
+  // Map each nextMatch to its feeder match indices in prevCol
+  const feederGroups = useMemo(() => {
+    if (prevCount === 0 || nextCount === 0) return [];
+
+    // 1. Check for explicit linkages via participant sourceMatchId or nextMatchId
+    const directGroups: { nextIndex: number; feederIndices: number[] }[] = [];
+    let hasAnyDirectLink = false;
+
+    // Collect all valid IDs belonging to matches in prevCol
+    const prevMatchIds = new Set(
+      prevMatches.flatMap(m => [m.matchId, m.rawMatch?.id].filter(Boolean) as string[])
+    );
+
+    for (let j = 0; j < nextCount; j++) {
+      const nextMatch = nextMatches[j];
+      const feeders: number[] = [];
+
+      // Check if nextMatch has any participant explicitly declaring a source from prevCol
+      const hasParticipantFromPrev = Boolean(
+        nextMatch.rawMatch?.participants?.some(
+          p => p.sourceMatchId && prevMatchIds.has(p.sourceMatchId)
+        )
+      );
+
+      for (let i = 0; i < prevCount; i++) {
+        const prevMatch = prevMatches[i];
+        const prevIds = [prevMatch.matchId, prevMatch.rawMatch?.id].filter(Boolean) as string[];
+
+        let isMatch = false;
+        if (hasParticipantFromPrev) {
+          // Explicit participant link takes strict precedence
+          isMatch = Boolean(
+            nextMatch.rawMatch?.participants?.some(
+              p => p.sourceMatchId && prevIds.includes(p.sourceMatchId)
+            )
+          );
+        } else {
+          // Fall back to nextMatchId only when participant sources are not yet defined
+          const nextId = prevMatch.rawMatch?.nextMatchId;
+          const nextIds = [nextMatch.matchId, nextMatch.rawMatch?.id].filter(Boolean) as string[];
+          isMatch = Boolean(nextId && nextIds.includes(nextId));
+        }
+
+        if (isMatch) {
+          if (!feeders.includes(i)) {
+            feeders.push(i);
+          }
+          hasAnyDirectLink = true;
+        }
+      }
+
+      // In WINNERS bracket (strictly 1v1 duels), a match can have at most 2 feeder matches
+      if (trackType === 'WINNERS' && feeders.length > 2) {
+        feeders.splice(2);
+      }
+
+      directGroups.push({ nextIndex: j, feederIndices: feeders });
+    }
+
+    if (hasAnyDirectLink) {
+      return directGroups;
+    }
+
+    // 2. Fallback: Standard binary tree fork (2 to 1)
+    if (prevCount === nextCount * 2) {
+      return Array.from({ length: nextCount }, (_, j) => ({
+        nextIndex: j,
+        feederIndices: [2 * j, 2 * j + 1]
+      }));
+    }
+
+    // 3. Fallback: Proportional bucket partition
+    if (prevCount >= nextCount) {
+      return Array.from({ length: nextCount }, (_, j) => {
+        const start = Math.round((j * prevCount) / nextCount);
+        const end = Math.round(((j + 1) * prevCount) / nextCount);
+        const feeders: number[] = [];
+        for (let i = start; i < end && i < prevCount; i++) {
+          feeders.push(i);
+        }
+        return { nextIndex: j, feederIndices: feeders };
+      });
+    }
+
+    // 4. Fallback: 1-to-1 or expanding
+    return Array.from({ length: nextCount }, (_, j) => ({
+      nextIndex: j,
+      feederIndices: j < prevCount ? [j] : []
+    }));
+  }, [prevMatches, nextMatches, prevCount, nextCount, trackType]);
+
+  // Compute SVG layout parameters with vertical collision avoidance (channel routing)
+  const routedGroups = useMemo(() => {
+    if (prevCount === 0 || nextCount === 0) return [];
+
+    const active = feederGroups
+      .filter(g => g.feederIndices.length > 0)
+      .map(g => {
+        const yTo = ((g.nextIndex + 0.5) / nextCount) * 100;
+        const yValues = g.feederIndices
+          .map(i => ((i + 0.5) / prevCount) * 100)
+          .sort((a, b) => a - b);
+        const minY = Math.min(yTo, yValues[0]);
+        const maxY = Math.max(yTo, yValues[yValues.length - 1]);
+        const isFlat = yValues.length === 1 && Math.abs(maxY - minY) < 0.2;
+        return {
+          ...g,
+          yTo,
+          yValues,
+          minY,
+          maxY,
+          isFlat,
+          channel: 0
+        };
+      });
+
+    // Assign non-flat groups to separate channels if their vertical spans overlap
+    const nonFlat = active.filter(g => !g.isFlat);
+    nonFlat.sort((a, b) => a.minY - b.minY);
+
+    const channelMaxY: number[] = [];
+    for (const g of nonFlat) {
+      let placed = false;
+      for (let c = 0; c < channelMaxY.length; c++) {
+        // If there's clear vertical space above this group in channel c, reuse channel c
+        if (channelMaxY[c] + 0.5 < g.minY) {
+          channelMaxY[c] = g.maxY;
+          g.channel = c;
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) {
+        g.channel = channelMaxY.length;
+        channelMaxY.push(g.maxY);
+      }
+    }
+
+    const numChannels = Math.max(1, channelMaxY.length);
+    return active.map(g => {
+      let trunkX = 24;
+      if (numChannels === 2) {
+        trunkX = g.channel === 0 ? 18 : 30;
+      } else if (numChannels > 2) {
+        trunkX = 14 + (g.channel * (20 / (numChannels - 1)));
+      }
+      return {
+        ...g,
+        trunkX
+      };
+    });
+  }, [feederGroups, prevCount, nextCount]);
+
+  if (prevCount === 0 || nextCount === 0) {
+    return null;
+  }
 
   return (
     <div className="w-10 sm:w-12 shrink-0 flex flex-col select-none">
-      {/* Header spacer to align with the stage header card */}
-      <div className="h-[72px] shrink-0 mb-3" />
+      {/* Header spacer to align with the stage header card (h-[68px] mb-3) */}
+      <div className="h-[68px] shrink-0 mb-3" />
 
       {/* Connector lines container */}
-      <div className="flex-1 flex flex-col">
-        {isBinaryFork ? (
-          // Standard binary tree: each next match has 2 feeders
-          Array.from({ length: nextMatchesCount }).map((_, idx) => (
-            <div key={idx} className="flex-1 relative w-full">
-              <svg
-                className="w-full h-full"
-                viewBox="0 0 48 100"
-                preserveAspectRatio="none"
-                fill="none"
-              >
-                {/* Feeder fork: Top from 25%, Bottom from 75%, joined at X=24 */}
+      <div className="flex-1 relative w-full">
+        <svg
+          className="w-full h-full absolute inset-0"
+          viewBox="0 0 48 100"
+          preserveAspectRatio="none"
+          fill="none"
+        >
+          {routedGroups.map(({ nextIndex, feederIndices, yValues, yTo, isFlat, trunkX }) => {
+            if (isFlat) {
+              return (
                 <path
-                  d="M 0 25 H 24 V 75 H 0"
+                  key={`path-${nextIndex}`}
+                  d={`M 0 ${yTo} H 42`}
                   stroke="currentColor"
                   strokeWidth="2.5"
                   vectorEffect="non-scaling-stroke"
@@ -632,107 +873,80 @@ function WinnersTreeConnector({
                   strokeLinejoin="round"
                   className={isCompleted ? 'text-blue-500/60' : 'text-blue-500/40'}
                 />
-                {/* Center branch leaving at Y=50% */}
+              );
+            }
+
+            if (feederIndices.length === 1) {
+              const yFrom = yValues[0];
+              const pathD = `M 0 ${yFrom} H ${trunkX} V ${yTo} H 42`;
+              return (
                 <path
-                  d="M 24 50 H 42"
+                  key={`path-${nextIndex}`}
+                  d={pathD}
                   stroke="currentColor"
                   strokeWidth="2.5"
                   vectorEffect="non-scaling-stroke"
                   strokeLinecap="round"
-                  className={isCompleted ? 'text-blue-400' : 'text-blue-400/80'}
+                  strokeLinejoin="round"
+                  className={isCompleted ? 'text-blue-500/60' : 'text-blue-500/40'}
                 />
-              </svg>
-              {/* Arrowhead centered at Y=50% right edge */}
-              <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1 pointer-events-none text-blue-400">
-                <ChevronRight className="w-3.5 h-3.5" />
-              </div>
-            </div>
-          ))
-        ) : (
-          // Direct flow when counts match or non-binary
-          Array.from({ length: Math.min(prevMatchesCount, nextMatchesCount) }).map((_, idx) => (
-            <div key={idx} className="flex-1 relative w-full flex items-center justify-center">
-              <div className="w-full flex items-center">
-                <span className="w-full h-[2px] bg-blue-500/40" />
-                <ChevronRight className="w-3.5 h-3.5 text-blue-400 -ml-1 flex-shrink-0" />
-              </div>
-            </div>
-          ))
-        )}
+              );
+            }
+
+            // Multiple feeders (2, 3, or more into 1 destination match)
+            // Draw a single continuous path by retracing lines to ensure strokeLinejoin="round" 
+            // perfectly rounds all corners, avoiding ugly flat butt-joints.
+            let pathD = `M 0 ${yValues[0]} H ${trunkX}`;
+            for (let i = 1; i < yValues.length; i++) {
+              pathD += ` V ${yValues[i]} H 0 H ${trunkX}`;
+            }
+            // Retrace trunk to the destination Y, then branch right
+            pathD += ` V ${yTo} H 42`;
+
+            return (
+              <path
+                key={`group-${nextIndex}`}
+                d={pathD}
+                stroke="currentColor"
+                strokeWidth="2.5"
+                vectorEffect="non-scaling-stroke"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={isCompleted ? 'text-blue-500/60' : 'text-blue-500/40'}
+              />
+            );
+          })}
+        </svg>
+
+        {/* Arrowheads centered at destination match Y positions */}
+        {routedGroups.map(({ nextIndex, yTo }) => (
+          <div
+            key={`arrow-${nextIndex}`}
+            className="absolute right-0 -translate-y-1/2 translate-x-1 pointer-events-none text-blue-400"
+            style={{ top: `${yTo}%` }}
+          >
+            <ChevronRight className="w-3.5 h-3.5" />
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-/* ========================================================================== */
-/* WILDCARD TREE CONNECTOR COMPONENT (FORWARD SURVIVAL FLOW)                  */
-/* ========================================================================== */
-
-function WildcardTreeConnector({
-  prevMatchesCount,
-  nextMatchesCount,
-  isCompleted
-}: {
-  prevMatchesCount: number;
-  nextMatchesCount: number;
+function WinnersTreeConnector(props: {
+  prevCol: StageColumn;
+  nextCol: StageColumn;
   isCompleted: boolean;
 }) {
-  const isBinaryFork = prevMatchesCount === nextMatchesCount * 2;
+  return <TreeConnector {...props} trackType="WINNERS" />;
+}
 
-  return (
-    <div className="w-10 sm:w-12 shrink-0 flex flex-col select-none">
-      {/* Header spacer to align with the stage header card */}
-      <div className="h-[72px] shrink-0 mb-3" />
-
-      {/* Connector lines container */}
-      <div className="flex-1 flex flex-col">
-        {isBinaryFork ? (
-          // Binary fork in Wildcard (e.g. Semifinal 2 matches -> Wildcard Final 1 match)
-          Array.from({ length: nextMatchesCount }).map((_, idx) => (
-            <div key={idx} className="flex-1 relative w-full">
-              <svg
-                className="w-full h-full"
-                viewBox="0 0 48 100"
-                preserveAspectRatio="none"
-                fill="none"
-              >
-                <path
-                  d="M 0 25 H 24 V 75 H 0"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  vectorEffect="non-scaling-stroke"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className={isCompleted ? 'text-blue-500/60' : 'text-blue-500/40'}
-                />
-                <path
-                  d="M 24 50 H 42"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  vectorEffect="non-scaling-stroke"
-                  strokeLinecap="round"
-                  className={isCompleted ? 'text-blue-400' : 'text-blue-400/80'}
-                />
-              </svg>
-              <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1 pointer-events-none text-blue-400">
-                <ChevronRight className="w-3.5 h-3.5" />
-              </div>
-            </div>
-          ))
-        ) : (
-          // Multi-slot flow (e.g. 3 matches -> 3 matches, or 3 matches -> 2 matches)
-          Array.from({ length: Math.min(prevMatchesCount, nextMatchesCount) }).map((_, idx) => (
-            <div key={idx} className="flex-1 relative w-full flex items-center justify-center">
-              <div className="w-full flex items-center">
-                <span className="w-full h-[2px] bg-blue-500/40" />
-                <ChevronRight className="w-3.5 h-3.5 text-blue-400 -ml-1 flex-shrink-0" />
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
+function WildcardTreeConnector(props: {
+  prevCol: StageColumn;
+  nextCol: StageColumn;
+  isCompleted: boolean;
+}) {
+  return <TreeConnector {...props} trackType="WILDCARD" />;
 }
 
 /* ========================================================================== */
@@ -959,22 +1173,18 @@ function TeamPill({
       }`}
     >
       <div className="flex items-center gap-2 truncate">
-        {team.logoUrl ? (
-          <img
-            src={team.logoUrl}
-            alt={team.name}
-            className="w-4 h-4 rounded object-contain bg-slate-950 border border-white/10 shrink-0"
-            onError={(e) => {
-              (e.target as HTMLElement).style.display = 'none';
-            }}
-          />
-        ) : team.seed !== undefined && team.seed !== null ? (
-          <span className="text-[9px] font-mono text-slate-500 font-bold shrink-0">
-            #{team.seed}
-          </span>
-        ) : null}
+        <TeamAvatar
+          logoUrl={team.logoUrl}
+          name={team.name}
+          size="xs"
+        />
         <div className="truncate">
           <div className="flex items-center gap-1.5 truncate">
+            {team.logoUrl && team.seed !== undefined && team.seed !== null && (
+              <span className="text-[9px] font-mono text-slate-500 font-bold shrink-0">
+                #{team.seed}
+              </span>
+            )}
             <span className={`block truncate font-semibold ${resultTextColor}`}>
               {team.name}
             </span>

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useTournament } from '@/context/TournamentContext';
-import GraphicalBracket from '@/components/GraphicalBracket';
+import TournamentTreeGraph from '@/components/TournamentTreeGraph';
 import MatchDetailModal from '@/components/MatchDetailModal';
 import ChampionBanner from '@/components/ChampionBanner';
 import { Swords, RefreshCw, GitBranch } from 'lucide-react';
@@ -13,6 +13,7 @@ export default function BracketPage() {
     overview,
     stages,
     matches,
+    teams,
     isLoading,
     refresh,
     selectedMatch,
@@ -71,10 +72,11 @@ export default function BracketPage() {
           </p>
         </div>
       ) : (
-        <GraphicalBracket
+        <TournamentTreeGraph
           stages={stages}
           matches={matches}
           overview={overview}
+          teams={teams}
           onSelectMatch={(m) => setSelectedMatch(m)}
         />
       )}

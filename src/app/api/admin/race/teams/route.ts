@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth';
 import { getRaceTeams, createRaceTeam, clearAllRaceTeams } from '@/lib/repository';
 import { resolveDriveLogoUrl } from '@/lib/logo-downloader';
+import { uploadUrlToFreeImage } from '@/lib/freeimage';
 import { isSupabaseConfigured, syncTeamToSupabase, fetchRaceTeamsFromSupabase, clearRaceTeamsFromSupabase } from '@/lib/supabase';
 
 export async function GET(req: NextRequest) {
@@ -70,11 +71,20 @@ export async function POST(req: NextRequest) {
 
     const division: 'SCHOOL' | 'UNIVERSITY' = categoryDivision === 'UNIVERSITY' ? 'UNIVERSITY' : 'SCHOOL';
 
-    // Store Google Drive Link / image URL directly in database as logo_url (NO local file download)
+    // Store Freeimage CDN link / image URL directly in database as logo_url
     let resolvedLogoUrl: string | undefined = undefined;
     const rawUrl = (driveLink || directLogoUrl || '').trim();
     if (rawUrl) {
-      resolvedLogoUrl = resolveDriveLogoUrl(rawUrl) || rawUrl;
+      try {
+        const hosted = await uploadUrlToFreeImage(rawUrl, name.trim());
+        if (hosted.success && hosted.url) {
+          resolvedLogoUrl = hosted.url;
+        } else {
+          resolvedLogoUrl = resolveDriveLogoUrl(rawUrl) || rawUrl;
+        }
+      } catch {
+        resolvedLogoUrl = resolveDriveLogoUrl(rawUrl) || rawUrl;
+      }
     }
 
     let team: any;

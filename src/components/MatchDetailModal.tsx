@@ -1,8 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Match } from '@/lib/types';
 import { X, Trophy, Swords, ArrowRight, Clock } from 'lucide-react';
+import TeamAvatar from './TeamAvatar';
 
 interface MatchDetailModalProps {
   match: Match | null;
@@ -10,22 +12,37 @@ interface MatchDetailModalProps {
 }
 
 export default function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
-  if (!match) return null;
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (mounted && match) {
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = '';
+      };
+    }
+  }, [mounted, match]);
+
+  if (!match || !mounted) return null;
 
   const isCompleted = match.status === 'COMPLETED';
   const isLive = match.status === 'LIVE';
   const isBye = match.status === 'BYE';
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+  const modalContent = (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
       <div 
-        className="w-full max-w-lg bg-[#0e1626] border border-white/10 rounded-2xl shadow-2xl overflow-hidden text-slate-200"
+        className="w-full max-w-lg max-h-[90vh] flex flex-col bg-[#0e1626] border border-white/10 rounded-2xl shadow-2xl overflow-hidden text-slate-200"
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-slate-900/60">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-white/10 bg-slate-900/60 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-1.5 rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/30">
               <Swords className="w-5 h-5" />
@@ -53,7 +70,7 @@ export default function MatchDetailModal({ match, onClose }: MatchDetailModalPro
         </div>
 
         {/* Content Body */}
-        <div className="p-6 space-y-6">
+        <div className="p-4 sm:p-6 space-y-6 overflow-y-auto">
           {/* Status Banner */}
           <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-slate-900/80 border border-white/5">
             <span className="text-xs text-slate-400 font-medium">Match Status</span>
@@ -93,11 +110,18 @@ export default function MatchDetailModal({ match, onClose }: MatchDetailModalPro
             {isBye ? (
               <div className="p-4 rounded-xl bg-blue-950/30 border border-blue-500/30">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-bold text-white text-base">
-                      {match.participants[0]?.team?.name || 'TBD Team'}
-                    </h4>
-                    {match.participants[0]?.team?.organization && <p className="text-xs text-blue-300">{match.participants[0].team.organization}</p>}
+                  <div className="flex items-center gap-3">
+                    <TeamAvatar
+                      logoUrl={match.participants[0]?.team?.logoUrl}
+                      name={match.participants[0]?.team?.name}
+                      size="md"
+                    />
+                    <div>
+                      <h4 className="font-bold text-white text-base">
+                        {match.participants[0]?.team?.name || 'TBD Team'}
+                      </h4>
+                      {match.participants[0]?.team?.organization && <p className="text-xs text-blue-300">{match.participants[0].team.organization}</p>}
+                    </div>
                   </div>
                   <span className="text-xs font-bold px-2.5 py-1 rounded bg-blue-500/20 text-blue-300 border border-blue-500/40">
                     BYE ADVANCE
@@ -137,11 +161,12 @@ export default function MatchDetailModal({ match, onClose }: MatchDetailModalPro
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs ${
-                          isWinner ? 'bg-blue-500 text-black' : 'bg-slate-800 text-slate-400'
-                        }`}>
-                          {idx + 1}
-                        </div>
+                        <TeamAvatar
+                          logoUrl={p.team?.logoUrl}
+                          name={p.team?.name}
+                          cornerColor={isWinner ? 'blue' : idx === 0 ? 'red' : idx === 1 ? 'blue' : 'green'}
+                          size="sm"
+                        />
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-white text-sm">
@@ -273,7 +298,7 @@ export default function MatchDetailModal({ match, onClose }: MatchDetailModalPro
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-3.5 bg-slate-900/80 border-t border-white/10 flex justify-end">
+        <div className="px-4 sm:px-6 py-3.5 bg-slate-900/80 border-t border-white/10 flex justify-end shrink-0">
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-white transition-colors"
@@ -284,4 +309,6 @@ export default function MatchDetailModal({ match, onClose }: MatchDetailModalPro
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }

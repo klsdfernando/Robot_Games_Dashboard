@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth';
 import { generateWildcardStage, getTeams, calculateTeamLives } from '@/lib/repository';
 import { generateWildcardProposal } from '@/lib/tournament-engine';
+import { isSupabaseConfigured, syncTournamentStateToSupabase } from '@/lib/supabase';
 import { StageType } from '@/lib/types';
 import db from '@/lib/db';
 
@@ -82,6 +83,10 @@ export async function POST(req: NextRequest) {
     const result = generateWildcardStage(categoryId, sourceStage || 'ROUND_1', manualGroups);
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+
+    if (isSupabaseConfigured()) {
+      syncTournamentStateToSupabase(categoryId).catch(() => {});
     }
 
     return NextResponse.json({ success: true, stageType: result.stageType });

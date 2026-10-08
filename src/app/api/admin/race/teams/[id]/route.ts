@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth';
 import { getTeamById, updateTeam, deleteRaceTeam } from '@/lib/repository';
 import { resolveDriveLogoUrl } from '@/lib/logo-downloader';
+import { uploadUrlToFreeImage } from '@/lib/freeimage';
 import { isSupabaseConfigured, syncTeamToSupabase, deleteTeamFromSupabase } from '@/lib/supabase';
 
 export async function PUT(
@@ -28,7 +29,17 @@ export async function PUT(
     let resolvedLogoUrl = directLogoUrl !== undefined ? directLogoUrl : (existing?.logoUrl);
 
     if (driveLink && typeof driveLink === 'string' && driveLink.trim()) {
-      resolvedLogoUrl = resolveDriveLogoUrl(driveLink.trim()) || driveLink.trim();
+      const link = driveLink.trim();
+      try {
+        const hosted = await uploadUrlToFreeImage(link, name?.trim() || existing?.name || 'race-team');
+        if (hosted.success && hosted.url) {
+          resolvedLogoUrl = hosted.url;
+        } else {
+          resolvedLogoUrl = resolveDriveLogoUrl(link) || link;
+        }
+      } catch {
+        resolvedLogoUrl = resolveDriveLogoUrl(link) || link;
+      }
     }
 
     const categoryId = categoryDivision === 'UNIVERSITY' ? 'cat-race-university' : 'cat-race-school';

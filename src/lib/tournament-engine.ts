@@ -2,14 +2,20 @@ import { Team, WildcardProposal, ReEntryProposal, StageType, Match, MatchPartici
 
 /**
  * Calculates optimal Wildcard group sizes for any number of participants.
- * Rules:
- * - Primarily groups of 3.
- * - If divisible by 3: [3, 3, 3...]
- * - If remainder == 2: one 2-team group [3, 3, ..., 2]
- * - If remainder == 1: rebalance the last 4 into two 2-team groups [3, ..., 2, 2] (NEVER 3 + 1)
- * - If exactly 2: [2]
- * - If exactly 3: [3]
- * - If exactly 1: [1] (requires admin resolution)
+ * Prioritizes 3-team battles for Wildcard:
+ * - Divisible by 3: all 3-team battles [3, 3, 3...]
+ *   e.g. 9 lost teams -> [3, 3, 3] (three 3-team battles)
+ *   e.g. 6 lost teams -> [3, 3] (two 3-team battles)
+ *   e.g. 3 lost teams -> [3] (one 3-team battle)
+ * - Remainder 2: two-team battle at the end [3, 3, ..., 2]
+ *   e.g. 8 lost teams -> [3, 3, 2] (two 3-team battles, one 2-team battle)
+ *   e.g. 5 lost teams -> [3, 2] (one 3-team battle, one 2-team battle)
+ *   e.g. 2 lost teams -> [2] (one 2-team battle)
+ * - Remainder 1: rebalance the last 4 into two 2-team battles [3, ..., 2, 2] (NEVER 3 + 1)
+ *   e.g. 7 lost teams -> [3, 2, 2] (one 3-team battle, two 2-team battles)
+ *   e.g. 10 lost teams -> [3, 3, 2, 2] (two 3-team battles, two 2-team battles)
+ *   e.g. 4 lost teams -> [2, 2] (two 2-team battles)
+ * - Exactly 1: [1] (requires admin resolution or Wildcard BYE)
  */
 export function calculateWildcardGroupSizes(count: number): number[] {
   if (count <= 0) return [];

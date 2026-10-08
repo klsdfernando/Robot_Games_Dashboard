@@ -140,6 +140,130 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    if (action === 'pull_from_supabase') {
+      const { queryPostgres } = await import('@/lib/pg');
+      const db = (await import('@/lib/db')).default;
+
+      const rows = await queryPostgres(`
+        SELECT team_no, name, category, category_folder, filename,
+               logo_url, viewer_url, thumbnail_url, dimensions, size,
+               status, organization, leader_name, leader_email, leader_phone
+        FROM public.teams
+        ORDER BY team_no ASC;
+      `);
+
+      if (!rows || rows.length === 0) {
+        return NextResponse.json({ success: false, error: 'No teams found in Supabase public.teams' }, { status: 404 });
+      }
+
+      let hw = 0;
+      let lw = 0;
+      let raceCount = 0;
+      const nowIso = new Date().toISOString();
+
+      const insertTeamStmt = db.prepare(`
+        INSERT INTO teams (
+          id, category_id, name, organization, seed, status, lives,
+          is_withdrawn, logo_url, race_category, notes, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          category_id=excluded.category_id,
+          name=excluded.name,
+          organization=excluded.organization,
+          seed=excluded.seed,
+          logo_url=excluded.logo_url,
+          race_category=excluded.race_category,
+          notes=excluded.notes,
+          updated_at=excluded.updated_at;
+      `);
+
+      const insertSlotStmt = db.prepare(`
+        INSERT INTO race_schedule (
+          id, team_id, team_name, robot_name, organization, logo_url,
+          slot_number, scheduled_time, status, track, category_division,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          team_name=excluded.team_name,
+          organization=excluded.organization,
+          logo_url=excluded.logo_url,
+          category_division=excluded.category_division,
+          updated_at=excluded.updated_at;
+      `);
+
+      for (const r of rows) {
+        const catLower = (r.category || '').toLowerCase();
+        let catId = 'cat-race-university';
+        let raceCat: 'SCHOOL' | 'UNIVERSITY' | null = 'UNIVERSITY';
+        let teamId = `team-race-uni-${r.team_no}`;
+
+        if (catLower.includes('heavy')) {
+          catId = 'cat-heavyweight';
+          raceCat = null;
+          teamId = `team-hw-${r.team_no}`;
+          hw++;
+        } else if (catLower.includes('light')) {
+          catId = 'cat-lightweight';
+          raceCat = null;
+          teamId = `team-lw-${r.team_no}`;
+          lw++;
+        } else if (catLower.includes('school')) {
+          catId = 'cat-race-school';
+          raceCat = 'SCHOOL';
+          teamId = `team-race-sch-${r.team_no}`;
+          raceCount++;
+        } else {
+          raceCount++;
+        }
+
+        const contactParts: string[] = [];
+        if (r.leader_name) contactParts.push(`Leader: ${r.leader_name}`);
+        if (r.leader_phone) contactParts.push(`Phone: ${r.leader_phone}`);
+        if (r.leader_email) contactParts.push(`Email: ${r.leader_email}`);
+        const notes = contactParts.length > 0 ? contactParts.join(' | ') : null;
+
+        insertTeamStmt.run(
+          teamId,
+          catId,
+          r.name.trim(),
+          r.organization?.trim() || null,
+          r.team_no,
+          'ACTIVE',
+          2,
+          0,
+          r.logo_url?.trim() || null,
+          raceCat,
+          notes,
+          nowIso,
+          nowIso
+        );
+
+        if (raceCat) {
+          insertSlotStmt.run(
+            `slot-race-${r.team_no}`,
+            teamId,
+            r.name.trim(),
+            null,
+            r.organization?.trim() || null,
+            r.logo_url?.trim() || null,
+            r.team_no,
+            '09:30 AM',
+            'SCHEDULED',
+            'Main Arena Track',
+            raceCat,
+            nowIso,
+            nowIso
+          );
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Imported ${rows.length} teams from Supabase! (Heavyweight: ${hw}, Lightweight: ${lw}, Race: ${raceCount})`,
+        counts: { total: rows.length, heavyweight: hw, lightweight: lw, race: raceCount }
+      });
+    }
+
     return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Supabase action failed' }, { status: 500 });

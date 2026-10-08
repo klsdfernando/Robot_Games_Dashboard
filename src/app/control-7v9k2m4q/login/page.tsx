@@ -19,7 +19,7 @@ export default function AdminLoginPage() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ passkey })
+        body: JSON.stringify({ password: passkey, passkey })
       });
 
       const data = await res.json();
@@ -61,7 +61,7 @@ export default function AdminLoginPage() {
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-              Event passkey
+              Admin Password
             </label>
             <input
               type="password"
@@ -69,7 +69,7 @@ export default function AdminLoginPage() {
               onChange={(e) => setPasskey(e.target.value)}
               required
               autoComplete="current-password"
-              placeholder="Enter the organizer passkey"
+              placeholder="Enter the admin password"
               className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/10 text-white text-xs focus:outline-none focus:border-blue-400"
             />
           </div>

@@ -24,20 +24,21 @@ export async function POST(req: NextRequest) {
     }
     if (current && current.resetAt <= now) attempts.delete(key);
 
-    const { passkey } = await req.json();
+    const body = await req.json();
+    const password = typeof body === 'object' && body !== null ? String(body.password || body.passkey || '').trim() : '';
 
-    if (typeof passkey !== 'string' || passkey.length < 6 || passkey.length > 128) {
-      return NextResponse.json({ error: 'A valid organizer passkey is required' }, { status: 400 });
+    if (!password) {
+      return NextResponse.json({ error: 'Admin password is required' }, { status: 400 });
     }
 
-    const isValid = await verifyAdminPasskey(passkey);
+    const isValid = await verifyAdminPasskey(password);
     if (!isValid) {
       const entry = attempts.get(key);
       attempts.set(key, {
         count: (entry?.resetAt && entry.resetAt > now ? entry.count : 0) + 1,
         resetAt: entry?.resetAt && entry.resetAt > now ? entry.resetAt : now + WINDOW_MS,
       });
-      return NextResponse.json({ error: 'Invalid passkey' }, { status: 401 });
+      return NextResponse.json({ error: 'Invalid password' }, { status: 401 });
     }
 
     attempts.delete(key);

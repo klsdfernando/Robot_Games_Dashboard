@@ -41,7 +41,7 @@ export default function RootLayout({
         <TournamentProvider>
           <div className="site-shell">
             <Navbar />
-            <main id="main-content" className="relative z-10 mx-auto w-full max-w-[90rem] flex-1 px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
+            <main id="main-content" className="relative mx-auto w-full max-w-[90rem] flex-1 px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
               <BattlesDashboardHeader />
               {children}
             </main>

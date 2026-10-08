@@ -24,6 +24,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { Team } from '@/lib/types';
+import ImageUploader from '@/components/ImageUploader';
 
 export default function AdminTeamsPage() {
   const { selectedCategory, overview, teams, refresh } = useTournament();
@@ -558,21 +559,12 @@ export default function AdminTeamsPage() {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Team Logo (Google Drive Link or URL)
-                </label>
-                <input
-                  type="text"
-                  value={formLogoUrl}
-                  onChange={(e) => setFormLogoUrl(e.target.value)}
-                  placeholder="e.g. https://drive.google.com/file/d/... or /uploads/..."
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/10 text-white text-xs focus:outline-none focus:border-blue-400"
-                />
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Supports Google Drive share links, direct image URLs, or local paths.
-                </p>
-              </div>
+              <ImageUploader
+                value={formLogoUrl}
+                onChange={setFormLogoUrl}
+                label="Team Logo (Freeimage CDN / Drive Link)"
+                description="Upload an image directly or paste any Drive link to automatically host onto high-speed CDN."
+              />
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
