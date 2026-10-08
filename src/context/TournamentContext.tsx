@@ -20,6 +20,7 @@ interface TournamentContextType {
   teams: Team[];
   isLoading: boolean;
   isPolling: boolean;
+  lastUpdated: number;
   refresh: () => Promise<void>;
   selectedMatch: Match | null;
   setSelectedMatch: (m: Match | null) => void;
@@ -36,6 +37,7 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
   const [teams, setTeams] = useState<Team[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isPolling, setIsPolling] = useState<boolean>(false);
+  const [lastUpdated, setLastUpdated] = useState<number>(Date.now());
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
 
   const fetchState = useCallback(async (category: TournamentCategory, isBackground = false) => {
@@ -51,6 +53,7 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
       setStages(data.stages || []);
       setMatches(data.matches || []);
       setTeams(data.teams || []);
+      setLastUpdated(Date.now());
     } catch (err) {
       console.error('Error fetching tournament state:', err);
     } finally {
@@ -78,6 +81,7 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
               await fetchState(selectedCategory, true);
             }
           }
+          if (isMounted) setLastUpdated(Date.now());
         }
       } catch {
         // Silent fail on background poll
@@ -108,6 +112,7 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
         teams,
         isLoading,
         isPolling,
+        lastUpdated,
         refresh,
         selectedMatch,
         setSelectedMatch

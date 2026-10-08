@@ -22,7 +22,7 @@ export default function MatchCard({ match, onClick, compact = false }: MatchCard
       onClick={onClick}
       className={`group relative w-full overflow-hidden border text-left transition-all duration-200 ${
         isLive
-          ? 'border-red-500/70 bg-gradient-to-br from-[#1a080d] to-slate-950 shadow-[0_0_0_1px_rgba(239,68,68,0.25),0_18px_40px_rgba(185,28,28,0.25)]'
+          ? 'border-red-500/30 bg-[#080d18]'
           : isCompleted
           ? 'border-blue-500/15 bg-[#080d18] hover:border-blue-400/45'
           : isBye
@@ -32,7 +32,7 @@ export default function MatchCard({ match, onClick, compact = false }: MatchCard
           : 'border-blue-500/15 bg-[#080d18] hover:-translate-y-0.5 hover:border-blue-400/50 hover:bg-[#0a1222]'
       } ${compact ? 'min-w-[220px] p-3 text-xs' : 'min-w-[260px] p-4 sm:min-w-[280px]'}`}
     >
-      <span className={`absolute inset-y-0 left-0 w-0.5 ${isLive ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]' : 'bg-blue-600/60'}`} aria-hidden="true" />
+      <span className={`absolute inset-y-0 left-0 w-0.5 ${isLive ? 'bg-red-500' : 'bg-blue-600/60'}`} aria-hidden="true" />
       {/* Top Header of the Card */}
       <div className="mb-3 flex items-center justify-between gap-2 border-b border-blue-500/10 pb-2.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">
         <div className="flex items-center gap-1.5 truncate">
@@ -46,7 +46,7 @@ export default function MatchCard({ match, onClick, compact = false }: MatchCard
         {/* Status Indicator Pill */}
         <div>
           {isLive && (
-            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black tracking-wider bg-red-500/20 text-red-400 border border-red-500/40 shadow-sm shadow-red-950">
+            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black tracking-wider bg-red-500/15 text-red-400 border border-red-500/30 shadow-sm">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
