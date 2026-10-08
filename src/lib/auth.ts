@@ -10,7 +10,9 @@ const COOKIE_NAME = 'rg_admin_session';
 
 export async function verifyAdminPasskey(passkey: string): Promise<boolean> {
   const configuredHash = process.env.ADMIN_PASSKEY_HASH;
-  return configuredHash ? bcrypt.compare(passkey, configuredHash) : false;
+  if (!configuredHash) return false;
+  const normalizedHash = configuredHash.replace(/\\/g, '');
+  return bcrypt.compare(passkey, normalizedHash);
 }
 
 export async function createAdminToken(username: string): Promise<string> {

@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
 
     const { passkey } = await req.json();
 
-    if (typeof passkey !== 'string' || passkey.length < 12 || passkey.length > 128) {
+    if (typeof passkey !== 'string' || passkey.length < 6 || passkey.length > 128) {
       return NextResponse.json({ error: 'A valid organizer passkey is required' }, { status: 400 });
     }
 
