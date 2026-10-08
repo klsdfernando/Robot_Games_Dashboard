@@ -329,10 +329,54 @@ export default function HomePage() {
 
               {liveMatch ? (
                 <div className="flex-1 flex flex-col justify-between">
-                  {/* Centered face-off 3-column layout (Team #1 | VS | Team #2) */}
+                  {/* Centered face-off layout for Live Match (handles both 2-way and 3-way matches) */}
                   {(() => {
-                    const p1 = liveMatch.participants[0];
-                    const p2 = liveMatch.participants[1];
+                    const validParticipants = liveMatch.participants.filter(
+                      (p) => Boolean(p.teamId && p.team)
+                    );
+                    const isThreeWay = validParticipants.length === 3 || liveMatch.participants.length === 3;
+                    const participantsToShow = validParticipants.length > 0 ? validParticipants : liveMatch.participants;
+
+                    if (isThreeWay) {
+                      return (
+                        <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 my-auto py-2">
+                          {participantsToShow.map((p, idx) => {
+                            const corner = idx === 0 ? 'red' : idx === 1 ? 'blue' : 'green';
+                            return (
+                              <React.Fragment key={p.id}>
+                                {idx > 0 && (
+                                  <div className="flex items-center justify-center shrink-0 w-6 h-6 rounded-full bg-[#080d18] border border-white/20 text-xs font-mono font-black text-slate-400 shadow-sm">
+                                    VS
+                                  </div>
+                                )}
+                                <div className="relative flex flex-col items-center justify-center pt-4 sm:pt-5 pb-3 sm:pb-4 px-2 sm:px-3 rounded-xl bg-[#080d18]/70 border border-white/5 transition-colors flex-1 min-w-[105px] max-w-[155px]">
+                                  {/* Top accent */}
+                                  <div className={`absolute top-0 inset-x-0 h-1 ${getCornerBorderClass(idx)} rounded-t-xl`} />
+
+                                  <TeamAvatar
+                                    logoUrl={p.team?.logoUrl}
+                                    name={p.team?.name}
+                                    cornerColor={corner}
+                                    size="lg"
+                                  />
+
+                                  {/* Team name */}
+                                  <div className="mt-2.5 sm:mt-3 w-full min-w-0 flex items-center justify-center min-h-[2.25rem] sm:min-h-[2.5rem]">
+                                    <span className={`font-black text-white tracking-tight leading-snug break-words text-center ${getLiveNameSize(p.team?.name || '')}`}>
+                                      {p.team?.name || 'TBD Team'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </React.Fragment>
+                            );
+                          })}
+                        </div>
+                      );
+                    }
+
+                    // 2-team standard match face-off pattern
+                    const p1 = validParticipants[0] || liveMatch.participants[0];
+                    const p2 = validParticipants[1] || liveMatch.participants[1];
 
                     return (
                       <div className="grid grid-cols-1 min-[400px]:grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-4 my-auto py-2">
