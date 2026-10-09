@@ -65,37 +65,6 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
     fetchState(selectedCategory);
   }, [selectedCategory, fetchState]);
 
-  // Real-time polling check every 3.5 seconds
-  useEffect(() => {
-    let isMounted = true;
-    const interval = setInterval(async () => {
-      if (document.hidden) return; // Save bandwidth when tab inactive
-      try {
-        setIsPolling(true);
-        const res = await fetch('/api/realtime');
-        if (res.ok) {
-          const stats = await res.json();
-          // Check if updates exist
-          if (overview && (stats.matchCount !== matches.length || stats.lastUpdate > overview.currentStage)) {
-            if (isMounted) {
-              await fetchState(selectedCategory, true);
-            }
-          }
-          if (isMounted) setLastUpdated(Date.now());
-        }
-      } catch {
-        // Silent fail on background poll
-      } finally {
-        if (isMounted) setIsPolling(false);
-      }
-    }, 3500);
-
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
-  }, [selectedCategory, overview, matches.length, fetchState]);
-
   const refresh = async () => {
     await fetchState(selectedCategory);
   };

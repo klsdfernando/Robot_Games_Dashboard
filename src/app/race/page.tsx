@@ -64,10 +64,6 @@ export default function RobotRacePublicPage() {
 
   useEffect(() => {
     fetchSchedule(false);
-    const interval = setInterval(() => {
-      fetchSchedule(true);
-    }, 6000);
-    return () => clearInterval(interval);
   }, []);
 
   // Time Schedule: Filtered list (strictly departure times and teams)
