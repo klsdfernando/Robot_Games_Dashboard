@@ -19,7 +19,8 @@ import {
   RotateCcw,
   Lock,
   Unlock,
-  Loader2
+  Loader2,
+  GripVertical
 } from 'lucide-react';
 import { Team, Match } from '@/lib/types';
 
@@ -86,6 +87,74 @@ export default function AdminBracketPage() {
 
     return list;
   }, [previewPlan, overview?.categoryId]);
+
+  // Handle Drag & Drop Team Swaps directly in the Bracket Tree
+  const handleSwapBracketTeams = async (
+    source: { matchId: string; slotOrder: number; teamId?: string; teamName?: string },
+    target: { matchId: string; slotOrder: number; teamId?: string; teamName?: string }
+  ) => {
+    if (source.matchId === target.matchId && source.slotOrder === target.slotOrder) return;
+
+    // Mode A: Preview Plan (before bracket is confirmed to DB)
+    if (previewPlan && source.matchId.startsWith('prev-') && target.matchId.startsWith('prev-')) {
+      const srcMatchNum = parseInt(source.matchId.replace('prev-', ''), 10);
+      const tgtMatchNum = parseInt(target.matchId.replace('prev-', ''), 10);
+
+      const newMatches = [...previewPlan.matches];
+      const srcIdx = newMatches.findIndex(m => m.matchNumber === srcMatchNum);
+      const tgtIdx = newMatches.findIndex(m => m.matchNumber === tgtMatchNum);
+
+      if (srcIdx !== -1 && tgtIdx !== -1) {
+        const srcMatch = { ...newMatches[srcIdx] };
+        const tgtMatch = { ...newMatches[tgtIdx] };
+
+        const srcTeam = source.slotOrder === 1 ? srcMatch.team1 : srcMatch.team2;
+        const tgtTeam = target.slotOrder === 1 ? tgtMatch.team1 : tgtMatch.team2;
+
+        if (source.slotOrder === 1) srcMatch.team1 = tgtTeam;
+        else srcMatch.team2 = tgtTeam;
+
+        if (target.slotOrder === 1) tgtMatch.team1 = srcTeam;
+        else tgtMatch.team2 = srcTeam;
+
+        newMatches[srcIdx] = srcMatch;
+        newMatches[tgtIdx] = tgtMatch;
+
+        setPreviewPlan({
+          ...previewPlan,
+          matches: newMatches
+        });
+        setSuccess(`Swapped ${source.teamName || 'Team'} and ${target.teamName || 'Team'} in preview pairings!`);
+        return;
+      }
+    }
+
+    // Mode B: Active Live Bracket in Database
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/matches/swap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceMatchId: source.matchId,
+          sourceSlotOrder: source.slotOrder,
+          targetMatchId: target.matchId,
+          targetSlotOrder: target.slotOrder
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to swap teams');
+
+      setSuccess(`Successfully swapped ${data.sourceTeamName} and ${data.targetTeamName}! Match combinations updated.`);
+      await refresh();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleGeneratePreview = async () => {
     if (!overview?.categoryId) return;
@@ -402,7 +471,10 @@ export default function AdminBracketPage() {
                     }]}
                     matches={previewMatches}
                     overview={overview}
+                    teams={teams}
                     onSelectMatch={() => {}}
+                    isEditable={true}
+                    onSwapTeams={handleSwapBracketTeams}
                   />
                 </div>
               ) : (
@@ -414,15 +486,85 @@ export default function AdminBracketPage() {
                     >
                       <div className="flex items-center justify-between mb-2 text-[10px] text-slate-400 font-mono">
                         <span>Match #{m.matchNumber}</span>
-                        <span>1v1 Knockout</span>
+                        <span className="text-[9px] text-blue-400 font-bold">Drag to Swap</span>
                       </div>
                       <div className="space-y-1.5">
-                        <div className="p-2 rounded-lg bg-slate-800/80 text-white font-semibold text-xs truncate">
-                          {m.team1.name}
+                        <div
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData(
+                              'application/bracket-slot',
+                              JSON.stringify({
+                                matchId: `prev-${m.matchNumber}`,
+                                slotOrder: 1,
+                                teamId: m.team1.id,
+                                teamName: m.team1.name
+                              })
+                            );
+                            e.dataTransfer.effectAllowed = 'move';
+                          }}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = 'move';
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            try {
+                              const raw = e.dataTransfer.getData('application/bracket-slot');
+                              if (raw) {
+                                const src = JSON.parse(raw);
+                                handleSwapBracketTeams(src, {
+                                  matchId: `prev-${m.matchNumber}`,
+                                  slotOrder: 1,
+                                  teamId: m.team1.id,
+                                  teamName: m.team1.name
+                                });
+                              }
+                            } catch (err) {}
+                          }}
+                          className="p-2 rounded-lg bg-slate-800/80 text-white font-semibold text-xs truncate flex items-center justify-between cursor-grab active:cursor-grabbing hover:border-blue-400/50 border border-transparent transition-all"
+                        >
+                          <span className="truncate">{m.team1.name}</span>
+                          <GripVertical className="w-3.5 h-3.5 text-slate-500 shrink-0 ml-1" />
                         </div>
                         <div className="text-[10px] text-center font-bold text-slate-500">VS</div>
-                        <div className="p-2 rounded-lg bg-slate-800/80 text-white font-semibold text-xs truncate">
-                          {m.team2.name}
+                        <div
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData(
+                              'application/bracket-slot',
+                              JSON.stringify({
+                                matchId: `prev-${m.matchNumber}`,
+                                slotOrder: 2,
+                                teamId: m.team2.id,
+                                teamName: m.team2.name
+                              })
+                            );
+                            e.dataTransfer.effectAllowed = 'move';
+                          }}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = 'move';
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            try {
+                              const raw = e.dataTransfer.getData('application/bracket-slot');
+                              if (raw) {
+                                const src = JSON.parse(raw);
+                                handleSwapBracketTeams(src, {
+                                  matchId: `prev-${m.matchNumber}`,
+                                  slotOrder: 2,
+                                  teamId: m.team2.id,
+                                  teamName: m.team2.name
+                                });
+                              }
+                            } catch (err) {}
+                          }}
+                          className="p-2 rounded-lg bg-slate-800/80 text-white font-semibold text-xs truncate flex items-center justify-between cursor-grab active:cursor-grabbing hover:border-blue-400/50 border border-transparent transition-all"
+                        >
+                          <span className="truncate">{m.team2.name}</span>
+                          <GripVertical className="w-3.5 h-3.5 text-slate-500 shrink-0 ml-1" />
                         </div>
                       </div>
                     </div>
@@ -502,7 +644,10 @@ export default function AdminBracketPage() {
               stages={stages}
               matches={matches}
               overview={overview}
+              teams={teams}
               onSelectMatch={(m) => setSelectedMatch(m)}
+              isEditable={true}
+              onSwapTeams={handleSwapBracketTeams}
             />
           </div>
         </div>

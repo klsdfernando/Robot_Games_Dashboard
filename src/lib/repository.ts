@@ -604,6 +604,165 @@ export function setMatchWinner(
 }
 
 // -------------------------------------------------------------
+// MANUALLY ASSIGN / UPDATE TEAMS FOR A BATTLE
+// -------------------------------------------------------------
+export function updateMatchTeams(
+  matchId: string,
+  team1Id?: string | null,
+  team2Id?: string | null
+): { success: boolean; error?: string } {
+  const match = getMatchById(matchId);
+  if (!match) return { success: false, error: 'Match not found' };
+
+  if (match.status === 'COMPLETED') {
+    return { success: false, error: 'Cannot modify teams of a completed match. Use Winner Correction instead.' };
+  }
+
+  const t1 = team1Id && team1Id.trim() !== '' ? team1Id.trim() : null;
+  const t2 = team2Id && team2Id.trim() !== '' ? team2Id.trim() : null;
+
+  if (t1 && t2 && t1 === t2) {
+    return { success: false, error: 'A team cannot battle against itself in the same match' };
+  }
+
+  const transaction = db.transaction(() => {
+    const now = new Date().toISOString();
+    const existingParts = db.prepare(`
+      SELECT * FROM match_participants WHERE match_id = ? ORDER BY participant_order ASC
+    `).all(matchId) as any[];
+
+    // Slot 1
+    if (existingParts.length > 0) {
+      db.prepare(`
+        UPDATE match_participants
+        SET team_id = ?, advancement_source = CASE WHEN ? IS NOT NULL THEN 'MANUAL' ELSE advancement_source END
+        WHERE id = ?
+      `).run(t1, t1, existingParts[0].id);
+    } else {
+      const p1Id = crypto.randomUUID();
+      db.prepare(`
+        INSERT INTO match_participants (id, match_id, team_id, participant_order, is_winner, score, advancement_source)
+        VALUES (?, ?, ?, 1, 0, 0, 'MANUAL')
+      `).run(p1Id, matchId, t1);
+    }
+
+    // Slot 2
+    if (existingParts.length > 1) {
+      db.prepare(`
+        UPDATE match_participants
+        SET team_id = ?, advancement_source = CASE WHEN ? IS NOT NULL THEN 'MANUAL' ELSE advancement_source END
+        WHERE id = ?
+      `).run(t2, t2, existingParts[1].id);
+    } else {
+      const p2Id = crypto.randomUUID();
+      db.prepare(`
+        INSERT INTO match_participants (id, match_id, team_id, participant_order, is_winner, score, advancement_source)
+        VALUES (?, ?, ?, 2, 0, 0, 'MANUAL')
+      `).run(p2Id, matchId, t2);
+    }
+
+    db.prepare('UPDATE matches SET updated_at = ? WHERE id = ?').run(now, matchId);
+  });
+
+  try {
+    transaction();
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+// -------------------------------------------------------------
+// SWAP PARTICIPANTS BETWEEN TWO MATCH SLOTS
+// -------------------------------------------------------------
+export function swapMatchParticipants(
+  sourceMatchId: string,
+  sourceSlotOrder: number,
+  targetMatchId: string,
+  targetSlotOrder: number
+): { success: boolean; error?: string; sourceTeamName?: string; targetTeamName?: string; categoryId?: string } {
+  const sourceMatch = getMatchById(sourceMatchId);
+  const targetMatch = getMatchById(targetMatchId);
+
+  if (!sourceMatch || !targetMatch) {
+    return { success: false, error: 'One or both matches not found' };
+  }
+
+  if (sourceMatch.status !== 'SCHEDULED' || targetMatch.status !== 'SCHEDULED') {
+    return { success: false, error: 'Only scheduled matches can have combatants swapped' };
+  }
+
+  if (
+    sourceMatch.stageType.toLowerCase().includes('wildcard') ||
+    targetMatch.stageType.toLowerCase().includes('wildcard')
+  ) {
+    return { success: false, error: 'Wildcard matches cannot be manually swapped' };
+  }
+
+  const sourcePart = sourceMatch.participants.find(p => p.participantOrder === sourceSlotOrder);
+  const targetPart = targetMatch.participants.find(p => p.participantOrder === targetSlotOrder);
+
+  const sourceTeamId = sourcePart?.teamId || null;
+  const targetTeamId = targetPart?.teamId || null;
+
+  if (!sourceTeamId && !targetTeamId) {
+    return { success: false, error: 'Neither slot has a team assigned' };
+  }
+
+  const sourceTeamName = sourcePart?.team?.name || 'Empty Slot';
+  const targetTeamName = targetPart?.team?.name || 'Empty Slot';
+
+  const transaction = db.transaction(() => {
+    const now = new Date().toISOString();
+
+    // Update or insert source slot
+    if (sourcePart) {
+      db.prepare(`
+        UPDATE match_participants
+        SET team_id = ?, advancement_source = CASE WHEN ? IS NOT NULL THEN 'MANUAL' ELSE advancement_source END
+        WHERE id = ?
+      `).run(targetTeamId, targetTeamId, sourcePart.id);
+    } else {
+      db.prepare(`
+        INSERT INTO match_participants (id, match_id, team_id, participant_order, is_winner, score, advancement_source)
+        VALUES (?, ?, ?, ?, 0, 0, 'MANUAL')
+      `).run(crypto.randomUUID(), sourceMatchId, targetTeamId, sourceSlotOrder);
+    }
+
+    // Update or insert target slot
+    if (targetPart) {
+      db.prepare(`
+        UPDATE match_participants
+        SET team_id = ?, advancement_source = CASE WHEN ? IS NOT NULL THEN 'MANUAL' ELSE advancement_source END
+        WHERE id = ?
+      `).run(sourceTeamId, sourceTeamId, targetPart.id);
+    } else {
+      db.prepare(`
+        INSERT INTO match_participants (id, match_id, team_id, participant_order, is_winner, score, advancement_source)
+        VALUES (?, ?, ?, ?, 0, 0, 'MANUAL')
+      `).run(crypto.randomUUID(), targetMatchId, sourceTeamId, targetSlotOrder);
+    }
+
+    db.prepare('UPDATE matches SET updated_at = ? WHERE id = ?').run(now, sourceMatchId);
+    if (sourceMatchId !== targetMatchId) {
+      db.prepare('UPDATE matches SET updated_at = ? WHERE id = ?').run(now, targetMatchId);
+    }
+  });
+
+  try {
+    transaction();
+    return {
+      success: true,
+      sourceTeamName,
+      targetTeamName,
+      categoryId: sourceMatch.categoryId
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+// -------------------------------------------------------------
 // DOWNSTREAM IMPACT DETECTION & WINNER CORRECTION
 // -------------------------------------------------------------
 export function getDownstreamImpact(matchId: string): DownstreamImpact {
@@ -729,7 +888,8 @@ export function correctMatchWinner(
  */
 export function confirmTeamsAndGenerateFullBracket(
   categoryId: string,
-  randomize: boolean = false
+  randomize: boolean = false,
+  customPairings?: { team1Id: string; team2Id: string }[]
 ): { success: boolean; error?: string; message?: string } {
   const teams = getTeams(categoryId).filter(t => !t.isWithdrawn);
   if (teams.length < 2) {
@@ -881,12 +1041,16 @@ export function confirmTeamsAndGenerateFullBracket(
       const r1_2 = crypto.randomUUID();
 
       createMatch({ id: r1_1, stageId: sR1, stageType: 'ROUND_1', matchNumber: 1, roundOrder: 1, status: 'SCHEDULED', nextMatchId: wfId, wildcardMatchId: wcId });
-      addParticipant({ matchId: r1_1, order: 1, teamId: orderedTeams[0].id });
-      addParticipant({ matchId: r1_1, order: 2, teamId: orderedTeams[3].id });
+      const t1_1 = (customPairings && customPairings[0]?.team1Id) || orderedTeams[0].id;
+      const t1_2 = (customPairings && customPairings[0]?.team2Id) || orderedTeams[3].id;
+      addParticipant({ matchId: r1_1, order: 1, teamId: t1_1 });
+      addParticipant({ matchId: r1_1, order: 2, teamId: t1_2 });
 
       createMatch({ id: r1_2, stageId: sR1, stageType: 'ROUND_1', matchNumber: 2, roundOrder: 1, status: 'SCHEDULED', nextMatchId: wfId, wildcardMatchId: wcId });
-      addParticipant({ matchId: r1_2, order: 1, teamId: orderedTeams[1].id });
-      addParticipant({ matchId: r1_2, order: 2, teamId: orderedTeams[2].id });
+      const t2_1 = (customPairings && customPairings[1]?.team1Id) || orderedTeams[1].id;
+      const t2_2 = (customPairings && customPairings[1]?.team2Id) || orderedTeams[2].id;
+      addParticipant({ matchId: r1_2, order: 1, teamId: t2_1 });
+      addParticipant({ matchId: r1_2, order: 2, teamId: t2_2 });
 
       createMatch({ id: wcId, stageId: sWC, stageType: 'WILDCARD', matchNumber: 1, roundOrder: 1, status: 'SCHEDULED', nextMatchId: finalId });
       addParticipant({ matchId: wcId, order: 1, sourceMatchId: r1_1, advancementSource: 'WILDCARD_DROP' });
@@ -937,8 +1101,10 @@ export function confirmTeamsAndGenerateFullBracket(
           nextMatchId: i === 0 ? sf1Id : sf2Id
         });
 
-        addParticipant({ matchId: r1Id, order: 1, teamId: r1Teams[i * 2].id });
-        addParticipant({ matchId: r1Id, order: 2, teamId: r1Teams[i * 2 + 1].id });
+        const t1 = (customPairings && customPairings[i]?.team1Id) || r1Teams[i * 2]?.id;
+        const t2 = (customPairings && customPairings[i]?.team2Id) || r1Teams[i * 2 + 1]?.id;
+        if (t1) addParticipant({ matchId: r1Id, order: 1, teamId: t1 });
+        if (t2) addParticipant({ matchId: r1Id, order: 2, teamId: t2 });
       }
 
       // Round 1 Wildcard Matches (prioritize 3-way, fall back to 2-way)
@@ -1125,8 +1291,10 @@ export function confirmTeamsAndGenerateFullBracket(
           nextMatchId: qfIds[Math.floor((numByes + i) / 2)]
         });
 
-        addParticipant({ matchId: r1Id, order: 1, teamId: r1Teams[i * 2].id });
-        addParticipant({ matchId: r1Id, order: 2, teamId: r1Teams[i * 2 + 1].id });
+        const t1 = (customPairings && customPairings[i]?.team1Id) || r1Teams[i * 2]?.id;
+        const t2 = (customPairings && customPairings[i]?.team2Id) || r1Teams[i * 2 + 1]?.id;
+        if (t1) addParticipant({ matchId: r1Id, order: 1, teamId: t1 });
+        if (t2) addParticipant({ matchId: r1Id, order: 2, teamId: t2 });
       }
 
       // Top seed BYE if roster is odd

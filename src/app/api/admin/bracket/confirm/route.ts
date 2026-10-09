@@ -10,13 +10,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { categoryId, randomize } = await req.json();
+    const { categoryId, randomize, customPairings } = await req.json();
 
     if (!categoryId) {
       return NextResponse.json({ error: 'Category ID is required' }, { status: 400 });
     }
 
-    const result = confirmTeamsAndGenerateFullBracket(categoryId, Boolean(randomize));
+    const result = confirmTeamsAndGenerateFullBracket(categoryId, Boolean(randomize), customPairings);
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }

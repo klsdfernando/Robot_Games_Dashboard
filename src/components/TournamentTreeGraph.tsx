@@ -10,7 +10,8 @@ import {
   ArrowRight,
   CheckCircle2,
   GitBranch,
-  Crown
+  Crown,
+  GripVertical
 } from 'lucide-react';
 import TeamAvatar from './TeamAvatar';
 
@@ -20,6 +21,11 @@ interface TournamentTreeGraphProps {
   overview: TournamentOverview | null;
   teams?: Team[];
   onSelectMatch: (match: Match) => void;
+  isEditable?: boolean;
+  onSwapTeams?: (
+    source: { matchId: string; slotOrder: number; teamId?: string; teamName?: string },
+    target: { matchId: string; slotOrder: number; teamId?: string; teamName?: string }
+  ) => void;
 }
 
 interface TeamBoxData {
@@ -68,10 +74,13 @@ export default function TournamentTreeGraph({
   matches,
   overview,
   teams = [],
-  onSelectMatch
+  onSelectMatch,
+  isEditable = false,
+  onSwapTeams
 }: TournamentTreeGraphProps) {
   const [hoveredTeamName, setHoveredTeamName] = useState<string | null>(null);
   const [trackFilter, setTrackFilter] = useState<'ALL' | 'WINNERS' | 'WILDCARD'>('ALL');
+  const [dragOverTargetSlot, setDragOverTargetSlot] = useState<string | null>(null);
 
   const teamsMap = useMemo(() => {
     const map = new Map<string, Team>();
@@ -420,6 +429,18 @@ export default function TournamentTreeGraph({
           </div>
       </div>
 
+      {isEditable && (
+        <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-blue-500/10 border border-blue-500/25 text-blue-300 text-xs">
+          <GripVertical className="w-4 h-4 text-blue-400 shrink-0" />
+          <div>
+            <span className="font-bold text-white">Hold & Drag Bracket Customizer: </span>
+            <span className="text-slate-300">
+              Hold and drag any combatant card and drop it onto another team to instantly swap matchup combinations in scheduled rounds.
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* ==================================================================== */}
       {/* 1. UPPER TRACK: WINNERS BRACKET (2 by 2)                             */}
       {/* ==================================================================== */}
@@ -458,6 +479,10 @@ export default function TournamentTreeGraph({
                     onHoverTeam={setHoveredTeamName}
                     onSelectMatch={onSelectMatch}
                     trackType="WINNERS"
+                    isEditable={isEditable}
+                    onSwapTeams={onSwapTeams}
+                    dragOverTargetSlot={dragOverTargetSlot}
+                    setDragOverTargetSlot={setDragOverTargetSlot}
                   />
                   {colIdx < winnersStages.length - 1 && (
                     <WinnersTreeConnector
@@ -511,6 +536,10 @@ export default function TournamentTreeGraph({
                     onHoverTeam={setHoveredTeamName}
                     onSelectMatch={onSelectMatch}
                     trackType="WILDCARD"
+                    isEditable={isEditable}
+                    onSwapTeams={onSwapTeams}
+                    dragOverTargetSlot={dragOverTargetSlot}
+                    setDragOverTargetSlot={setDragOverTargetSlot}
                   />
                   {colIdx < wildcardStages.length - 1 && (
                     <WildcardTreeConnector
@@ -557,6 +586,10 @@ export default function TournamentTreeGraph({
                     hoveredTeamName={hoveredTeamName}
                     onHoverTeam={setHoveredTeamName}
                     onClick={() => finalStage.matches[0].rawMatch && onSelectMatch(finalStage.matches[0].rawMatch)}
+                    isEditable={isEditable}
+                    onSwapTeams={onSwapTeams}
+                    dragOverTargetSlot={dragOverTargetSlot}
+                    setDragOverTargetSlot={setDragOverTargetSlot}
                   />
                 </div>
               ) : (
@@ -599,13 +632,24 @@ function StageTreeColumn({
   hoveredTeamName,
   onHoverTeam,
   onSelectMatch,
-  trackType
+  trackType,
+  isEditable = false,
+  onSwapTeams,
+  dragOverTargetSlot,
+  setDragOverTargetSlot
 }: {
   col: StageColumn;
   hoveredTeamName: string | null;
   onHoverTeam: (name: string | null) => void;
   onSelectMatch: (m: Match) => void;
   trackType: 'WINNERS' | 'WILDCARD';
+  isEditable?: boolean;
+  onSwapTeams?: (
+    source: { matchId: string; slotOrder: number; teamId?: string; teamName?: string },
+    target: { matchId: string; slotOrder: number; teamId?: string; teamName?: string }
+  ) => void;
+  dragOverTargetSlot?: string | null;
+  setDragOverTargetSlot?: (slot: string | null) => void;
 }) {
   const isWildcard = col.isWildcard;
 
@@ -660,6 +704,10 @@ function StageTreeColumn({
               hoveredTeamName={hoveredTeamName}
               onHoverTeam={onHoverTeam}
               onClick={() => m.rawMatch && onSelectMatch(m.rawMatch)}
+              isEditable={isEditable}
+              onSwapTeams={onSwapTeams}
+              dragOverTargetSlot={dragOverTargetSlot}
+              setDragOverTargetSlot={setDragOverTargetSlot}
             />
           </div>
         ))}
@@ -953,13 +1001,21 @@ function WildcardTreeConnector(props: {
 /* BRACKET MATCH BLOCK COMPONENT                                              */
 /* ========================================================================== */
 
+/* ========================================================================== */
+/* BRACKET MATCH BLOCK COMPONENT                                              */
+/* ========================================================================== */
+
 function BracketMatchBlock({
   match,
   isWildcard,
   isFinal = false,
   hoveredTeamName,
   onHoverTeam,
-  onClick
+  onClick,
+  isEditable = false,
+  onSwapTeams,
+  dragOverTargetSlot,
+  setDragOverTargetSlot
 }: {
   match: MatchPairNode;
   isWildcard: boolean;
@@ -967,14 +1023,101 @@ function BracketMatchBlock({
   hoveredTeamName: string | null;
   onHoverTeam: (name: string | null) => void;
   onClick: () => void;
+  isEditable?: boolean;
+  onSwapTeams?: (
+    source: { matchId: string; slotOrder: number; teamId?: string; teamName?: string },
+    target: { matchId: string; slotOrder: number; teamId?: string; teamName?: string }
+  ) => void;
+  dragOverTargetSlot?: string | null;
+  setDragOverTargetSlot?: (targetKey: string | null) => void;
 }) {
   const isBye = match.status === 'BYE';
   const isLive = match.status === 'LIVE';
   const isCompleted = match.status === 'COMPLETED';
 
+  // Only scheduled non-wildcard matches can have their teams dragged/swapped
+  const isMatchSwappable =
+    isEditable &&
+    !isWildcard &&
+    match.status === 'SCHEDULED' &&
+    !match.matchId.startsWith('display-bye') &&
+    Boolean(onSwapTeams);
+
   const t1 = match.topTeam;
   const t2 = match.bottomTeam;
   const t3 = match.thirdTeam;
+
+  const renderTeamSlot = (team: TeamBoxData | undefined, slotNumber: number, badge?: string) => {
+    if (!team) return null;
+    const slotKey = `${match.matchId}-${slotNumber}`;
+    const canDrag = isMatchSwappable && !team.isEmptySlot && Boolean(team.id);
+    const canDrop = isMatchSwappable;
+    const isDragOver = dragOverTargetSlot === slotKey;
+
+    return (
+      <TeamPill
+        team={team}
+        slotNumber={slotNumber}
+        isHovered={hoveredTeamName === team.name}
+        onHover={onHoverTeam}
+        badge={badge}
+        isWildcardTrack={isWildcard}
+        isDraggable={canDrag}
+        isDroppable={canDrop}
+        isDragOver={isDragOver}
+        onDragStart={(e) => {
+          e.stopPropagation();
+          e.dataTransfer.setData(
+            'application/bracket-slot',
+            JSON.stringify({
+              matchId: match.matchId,
+              slotOrder: slotNumber,
+              teamId: team.id,
+              teamName: team.name
+            })
+          );
+          e.dataTransfer.effectAllowed = 'move';
+        }}
+        onDragOver={(e) => {
+          if (!canDrop) return;
+          e.preventDefault();
+          e.stopPropagation();
+          e.dataTransfer.dropEffect = 'move';
+          if (setDragOverTargetSlot && dragOverTargetSlot !== slotKey) {
+            setDragOverTargetSlot(slotKey);
+          }
+        }}
+        onDragLeave={(e) => {
+          e.stopPropagation();
+          if (setDragOverTargetSlot && dragOverTargetSlot === slotKey) {
+            setDragOverTargetSlot(null);
+          }
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (setDragOverTargetSlot) setDragOverTargetSlot(null);
+          if (!canDrop || !onSwapTeams) return;
+          try {
+            const raw = e.dataTransfer.getData('application/bracket-slot');
+            if (!raw) return;
+            const source = JSON.parse(raw);
+            if (source.matchId === match.matchId && source.slotOrder === slotNumber) {
+              return; // Dropped on itself
+            }
+            onSwapTeams(source, {
+              matchId: match.matchId,
+              slotOrder: slotNumber,
+              teamId: team.id,
+              teamName: team.name
+            });
+          } catch (err) {
+            console.error('Failed to parse drag drop data:', err);
+          }
+        }}
+      />
+    );
+  };
 
   return (
     <div
@@ -1029,25 +1172,14 @@ function BracketMatchBlock({
       {/* Combatant Team Boxes */}
       {isBye ? (
         <div className="space-y-1">
-          <TeamPill
-            team={t1}
-            isHovered={hoveredTeamName === t1.name}
-            onHover={onHoverTeam}
-            isWildcardTrack={isWildcard}
-          />
+          {renderTeamSlot(t1, 1)}
           <div className="flex items-center justify-end gap-1 px-2 pt-1 text-[9px] font-bold uppercase tracking-wider text-blue-400">
             <span>Advances</span><ArrowRight className="h-3 w-3" />
           </div>
         </div>
       ) : (
         <div className="space-y-1 relative">
-          <TeamPill
-            team={t1}
-            isHovered={hoveredTeamName === t1.name}
-            onHover={onHoverTeam}
-            badge={isFinal && !t1.isEmptySlot ? 'Winners Champion' : undefined}
-            isWildcardTrack={isWildcard}
-          />
+          {renderTeamSlot(t1, 1, isFinal && !t1.isEmptySlot ? 'Winners Champion' : undefined)}
 
           {/* Bracket Branch between combatants */}
           <div className="flex items-center justify-between px-2 text-[9px] font-mono text-slate-500">
@@ -1062,27 +1194,14 @@ function BracketMatchBlock({
             )}
           </div>
 
-          {t2 && (
-            <TeamPill
-              team={t2}
-              isHovered={hoveredTeamName === t2.name}
-              onHover={onHoverTeam}
-              badge={isFinal && !t2.isEmptySlot ? 'Wildcard Champion' : undefined}
-              isWildcardTrack={isWildcard}
-            />
-          )}
+          {t2 && renderTeamSlot(t2, 2, isFinal && !t2.isEmptySlot ? 'Wildcard Champion' : undefined)}
 
           {t3 && (
             <>
               <div className="flex items-center justify-between px-2 text-[9px] font-mono text-blue-500/70">
                 <span>3-WAY</span>
               </div>
-              <TeamPill
-                team={t3}
-                isHovered={hoveredTeamName === t3.name}
-                onHover={onHoverTeam}
-                isWildcardTrack={isWildcard}
-              />
+              {renderTeamSlot(t3, 3)}
             </>
           )}
 
@@ -1124,16 +1243,32 @@ function BracketMatchBlock({
 
 function TeamPill({
   team,
+  slotNumber,
   isHovered,
   onHover,
   badge,
-  isWildcardTrack = false
+  isWildcardTrack = false,
+  isDraggable = false,
+  isDroppable = false,
+  isDragOver = false,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop
 }: {
   team: TeamBoxData;
+  slotNumber?: number;
   isHovered: boolean;
   onHover: (name: string | null) => void;
   badge?: string;
   isWildcardTrack?: boolean;
+  isDraggable?: boolean;
+  isDroppable?: boolean;
+  isDragOver?: boolean;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDragLeave?: (e: React.DragEvent) => void;
+  onDrop?: (e: React.DragEvent) => void;
 }) {
   const isEmpty = team.isEmptySlot || !team.id;
   const isWinner = team.isWinner;
@@ -1151,21 +1286,37 @@ function TeamPill({
   if (isEmpty) {
     return (
       <div
-        className={`h-8 rounded-md border border-dashed transition-all select-none ${
-          isWildcardTrack
-            ? 'bg-blue-950/15 border-blue-500/25'
-            : 'bg-slate-950/30 border-white/10'
+        onDragOver={isDroppable ? onDragOver : undefined}
+        onDragLeave={isDroppable ? onDragLeave : undefined}
+        onDrop={isDroppable ? onDrop : undefined}
+        className={`h-8 rounded-md border border-dashed transition-all select-none flex items-center justify-center text-[10px] font-mono ${
+          isDragOver
+            ? 'border-blue-400 bg-blue-500/20 text-blue-300 ring-2 ring-blue-500/50'
+            : isWildcardTrack
+            ? 'bg-blue-950/15 border-blue-500/25 text-slate-500'
+            : 'bg-slate-950/30 border-white/10 text-slate-600'
         }`}
-      />
+      >
+        {isDragOver ? 'Drop Team Here' : ''}
+      </div>
     );
   }
 
   return (
     <div
+      draggable={isDraggable}
+      onDragStart={isDraggable ? onDragStart : undefined}
+      onDragOver={isDroppable ? onDragOver : undefined}
+      onDragLeave={isDroppable ? onDragLeave : undefined}
+      onDrop={isDroppable ? onDrop : undefined}
       onMouseEnter={() => onHover(team.name)}
       onMouseLeave={() => onHover(null)}
-      className={`flex items-center justify-between rounded-md border px-2.5 py-1.5 text-xs transition-all ${
-        isHovered
+      className={`group/pill flex items-center justify-between rounded-md border px-2.5 py-1.5 text-xs transition-all ${
+        isDraggable ? 'cursor-grab active:cursor-grabbing hover:border-blue-400/60' : ''
+      } ${
+        isDragOver
+          ? 'border-blue-400 bg-blue-500/30 ring-2 ring-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.35)]'
+          : isHovered
           ? 'border-blue-400 bg-blue-500/15 ring-1 ring-blue-400/30'
           : isWinner
           ? 'border-blue-500/45 bg-blue-950/35 font-bold text-white'
@@ -1173,6 +1324,9 @@ function TeamPill({
       }`}
     >
       <div className="flex items-center gap-2 truncate">
+        {isDraggable && (
+          <GripVertical className="w-3.5 h-3.5 text-slate-500 group-hover/pill:text-blue-400 shrink-0 transition-colors" />
+        )}
         <TeamAvatar
           logoUrl={team.logoUrl}
           name={team.name}
@@ -1198,13 +1352,21 @@ function TeamPill({
       </div>
 
       <div className="flex items-center gap-1.5 shrink-0 ml-2">
-        {typeof team.score === 'number' && team.score !== 0 && (
-          <span className="rounded bg-black/40 px-1.5 py-0.5 font-mono text-xs font-bold text-white">
-            {team.score}
+        {isDragOver ? (
+          <span className="text-[9px] font-bold text-blue-400 uppercase tracking-wider bg-blue-500/20 px-1.5 py-0.5 rounded border border-blue-400/40">
+            Swap
           </span>
-        )}
-        {isWinner && (
-          <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" />
+        ) : (
+          <>
+            {typeof team.score === 'number' && team.score !== 0 && (
+              <span className="rounded bg-black/40 px-1.5 py-0.5 font-mono text-xs font-bold text-white">
+                {team.score}
+              </span>
+            )}
+            {isWinner && (
+              <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" />
+            )}
+          </>
         )}
       </div>
     </div>
