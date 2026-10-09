@@ -242,21 +242,121 @@ export function updateTeam(id: string, updates: Partial<Team>): Team | null {
     id
   );
 
-  return getTeamById(id);
+  const updated = getTeamById(id);
+  if (updated) {
+    try {
+      db.prepare(`
+        UPDATE race_schedule
+        SET team_name = ?, robot_name = ?, organization = ?, logo_url = ?, updated_at = ?
+        WHERE team_id = ?
+      `).run(
+        updated.name,
+        updated.robotName || null,
+        updated.organization || null,
+        updated.logoUrl || null,
+        now,
+        id
+      );
+    } catch {}
+  }
+
+  return updated;
 }
 
 export function deleteTeam(id: string): { success: boolean; error?: string } {
-  // Check if team is used in match participants
-  const used = db.prepare('SELECT COUNT(*) as count FROM match_participants WHERE team_id = ?').get(id) as { count: number };
-  if (used.count > 0) {
-    return {
-      success: false,
-      error: 'Cannot delete team because it is already part of tournament matches. You can mark it as withdrawn instead.'
-    };
+  const team = getTeamById(id);
+  if (!team) {
+    return { success: false, error: 'Team not found' };
   }
 
-  db.prepare('DELETE FROM teams WHERE id = ?').run(id);
-  return { success: true };
+  const categoryId = team.categoryId;
+
+  try {
+    const tx = db.transaction(() => {
+      // 1. In match_participants, clear team_id and set placeholder to 'BYE'
+      db.prepare(`
+        UPDATE match_participants
+        SET team_id = NULL, placeholder_text = 'BYE', is_winner = 0, score = 0
+        WHERE team_id = ?
+      `).run(id);
+
+      // 2. In matches, clear winner_team_id if it was this team
+      db.prepare(`
+        UPDATE matches
+        SET winner_team_id = NULL
+        WHERE winner_team_id = ?
+      `).run(id);
+
+      // 3. Clear race_schedule if any
+      db.prepare('DELETE FROM race_schedule WHERE team_id = ? OR team_name = ?').run(id, team.name);
+
+      // 4. Delete from teams table
+      db.prepare('DELETE FROM teams WHERE id = ?').run(id);
+
+      // 5. Check if any matches in this category now have 1 valid team and 1 BYE
+      // If so, and status is SCHEDULED, advance the valid team as a BYE winner!
+      const affectedMatches = db.prepare(`
+        SELECT DISTINCT m.id, m.status FROM matches m
+        JOIN match_participants mp ON mp.match_id = m.id
+        WHERE m.category_id = ? AND m.status = 'SCHEDULED'
+      `).all(categoryId) as { id: string; status: string }[];
+
+      for (const m of affectedMatches) {
+        const parts = db.prepare('SELECT id, team_id, placeholder_text FROM match_participants WHERE match_id = ? ORDER BY participant_order').all(m.id) as any[];
+        const validParts = parts.filter(p => p.team_id !== null);
+        const byeParts = parts.filter(p => p.team_id === null && p.placeholder_text === 'BYE');
+
+        if (parts.length === 2 && validParts.length === 1 && byeParts.length === 1) {
+          const now = new Date().toISOString();
+          const winTeamId = validParts[0].team_id;
+          db.prepare('UPDATE match_participants SET is_winner = 1 WHERE id = ?').run(validParts[0].id);
+          db.prepare("UPDATE matches SET status = 'BYE', winner_team_id = ?, completed_at = ?, updated_at = ? WHERE id = ?")
+            .run(winTeamId, now, now, m.id);
+
+          // Find downstream next match and advance the team
+          const sourceRow = db.prepare('SELECT next_match_id FROM matches WHERE id = ?').get(m.id) as { next_match_id: string | null } | undefined;
+          let nextSlot = db.prepare(`
+            SELECT id, match_id FROM match_participants
+            WHERE source_match_id = ? AND (advancement_source = 'WINNER' OR advancement_source IS NULL) AND team_id IS NULL
+            ORDER BY participant_order ASC LIMIT 1
+          `).get(m.id) as { id: string; match_id: string } | undefined;
+
+          if (!nextSlot && sourceRow?.next_match_id) {
+            nextSlot = db.prepare(`
+              SELECT id, match_id FROM match_participants
+              WHERE match_id = ? AND team_id IS NULL
+              ORDER BY participant_order ASC LIMIT 1
+            `).get(sourceRow.next_match_id) as { id: string; match_id: string } | undefined;
+          }
+
+          if (nextSlot) {
+            db.prepare(`
+              UPDATE match_participants
+              SET team_id = ?, placeholder_text = NULL, advancement_source = 'WINNER'
+              WHERE id = ?
+            `).run(winTeamId, nextSlot.id);
+
+            const nextTargetSlots = db.prepare('SELECT id, team_id FROM match_participants WHERE match_id = ? ORDER BY participant_order').all(nextSlot.match_id) as { id: string; team_id: string | null }[];
+            if (nextTargetSlots.length >= 2 && nextTargetSlots.every(s => s.team_id !== null)) {
+              db.prepare("UPDATE matches SET status = 'SCHEDULED', updated_at = ? WHERE id = ?").run(now, nextSlot.match_id);
+            }
+          }
+        }
+      }
+    });
+
+    tx();
+
+    // Async sync deletion to Postgres / Supabase
+    import('@/lib/supabase').then(({ deleteTeamFromSupabase }) => {
+      deleteTeamFromSupabase(id, team.name).catch(() => {});
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('[deleteTeam Error]:', err);
+    return { success: false, error: err.message || 'Failed to delete team' };
+  }
 }
 
 // -------------------------------------------------------------
@@ -943,7 +1043,8 @@ export function correctMatchWinner(
 export function confirmTeamsAndGenerateFullBracket(
   categoryId: string,
   randomize: boolean = false,
-  customPairings?: { team1Id: string; team2Id: string }[]
+  customPairings?: { team1Id: string; team2Id: string }[],
+  forceRegenerate: boolean = false
 ): { success: boolean; error?: string; message?: string } {
   const teams = getTeams(categoryId).filter(t => !t.isWithdrawn);
   if (teams.length < 2) {
@@ -956,10 +1057,14 @@ export function confirmTeamsAndGenerateFullBracket(
   // Check if stages already exist for this category
   const existingStages = db.prepare("SELECT COUNT(*) as count FROM stages WHERE category_id = ?").get(categoryId) as { count: number };
   if (existingStages.count > 0) {
-    return {
-      success: false,
-      error: 'Tournament bracket has already been generated. Reset tournament first if you wish to re-generate.'
-    };
+    if (forceRegenerate) {
+      resetCategoryTournament(categoryId);
+    } else {
+      return {
+        success: false,
+        error: 'Tournament bracket has already been generated. Reset tournament first if you wish to re-generate.'
+      };
+    }
   }
 
   let orderedTeams = [...teams];

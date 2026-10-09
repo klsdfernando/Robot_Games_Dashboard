@@ -68,14 +68,14 @@ export async function DELETE(
   try {
     const { id } = await context.params;
 
-    if (isSupabaseConfigured()) {
-      deleteTeamFromSupabase(id).catch(() => {});
-    }
-
     const result = deleteTeam(id);
 
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+
+    if (isSupabaseConfigured()) {
+      deleteTeamFromSupabase(id).catch(() => {});
     }
 
     return NextResponse.json({ success: true });

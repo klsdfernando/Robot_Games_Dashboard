@@ -31,6 +31,7 @@ export default function AdminTeamsPage() {
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [formName, setFormName] = useState('');
+  const [formRobotName, setFormRobotName] = useState('');
   const [formOrg, setFormOrg] = useState('');
   const [formSeed, setFormSeed] = useState<string>('');
   const [formLogoUrl, setFormLogoUrl] = useState('');
@@ -56,7 +57,7 @@ export default function AdminTeamsPage() {
     warnings?: string[];
   } | null>(null);
 
-  const handleConfirmRosterAndBuildBracket = async () => {
+  const handleConfirmRosterAndBuildBracket = async (forceRegenerate: boolean = false) => {
     if (!overview?.categoryId) return;
     setLoading(true);
     setError(null);
@@ -66,7 +67,8 @@ export default function AdminTeamsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           categoryId: overview.categoryId,
-          randomize: randomizePairings
+          randomize: randomizePairings,
+          forceRegenerate
         })
       });
       const data = await res.json();
@@ -107,6 +109,7 @@ export default function AdminTeamsPage() {
 
   const openAddModal = () => {
     setFormName('');
+    setFormRobotName('');
     setFormOrg('');
     setFormSeed('');
     setFormLogoUrl('');
@@ -118,6 +121,7 @@ export default function AdminTeamsPage() {
   const openEditModal = (team: Team) => {
     setEditingTeam(team);
     setFormName(team.name);
+    setFormRobotName(team.robotName || '');
     setFormOrg(team.organization || '');
     setFormSeed(team.seed ? String(team.seed) : '');
     setFormLogoUrl(team.logoUrl || '');
@@ -139,6 +143,7 @@ export default function AdminTeamsPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: formName,
+            robotName: formRobotName,
             organization: formOrg,
             seed: formSeed ? Number(formSeed) : null,
             logoUrl: formLogoUrl,
@@ -157,6 +162,7 @@ export default function AdminTeamsPage() {
           body: JSON.stringify({
             categoryId: overview.categoryId,
             name: formName,
+            robotName: formRobotName,
             organization: formOrg,
             seed: formSeed ? Number(formSeed) : null,
             logoUrl: formLogoUrl,
@@ -213,7 +219,11 @@ export default function AdminTeamsPage() {
   };
 
   const handleDeleteTeam = async (team: Team) => {
-    if (!confirm(`Are you sure you want to delete ${team.name}? This action cannot be undone.`)) {
+    const confirmMsg = isLocked
+      ? `Are you sure you want to delete ${team.name}?\n\nThis will remove the team from the roster and convert their tournament bracket match slots to BYE.`
+      : `Are you sure you want to delete ${team.name}? This action cannot be undone.`;
+
+    if (!confirm(confirmMsg)) {
       return;
     }
 
@@ -308,22 +318,11 @@ export default function AdminTeamsPage() {
 
           {/* Register New Team */}
           <button
-            onClick={() => {
-              if (isLocked) {
-                alert('Tournament roster is currently locked. Reset the bracket below if you need to add new teams.');
-                return;
-              }
-              openAddModal();
-            }}
-            disabled={isLocked}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors ${
-              isLocked
-                ? 'bg-slate-800/80 text-slate-500 border border-white/5 cursor-not-allowed opacity-60'
-                : 'bg-blue-500 hover:bg-blue-400 text-black shadow-lg shadow-blue-500/20'
-            }`}
-            title={isLocked ? 'Roster is locked because the tournament bracket is active' : 'Add new team'}
+            onClick={() => openAddModal()}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors bg-blue-500 hover:bg-blue-400 text-black shadow-lg shadow-blue-500/20"
+            title="Add new team"
           >
-            {isLocked ? <Lock className="w-4 h-4 text-slate-500" /> : <Plus className="w-4 h-4" />}
+            <Plus className="w-4 h-4" />
             <span>Add Team</span>
           </button>
         </div>
@@ -346,11 +345,11 @@ export default function AdminTeamsPage() {
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-1">
-                Tournament tree architecture is generated and active. As matches are completed in the arena, winners advance and wildcard losers automatically bill downstream slots.
+                Tournament tree architecture is generated and active. You can edit teams, delete teams, or click <strong>Update Bracket</strong> to refresh the tree for changes.
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0 w-full md:w-auto">
+          <div className="flex flex-wrap items-center gap-2 shrink-0 w-full md:w-auto">
             <Link
               href="/control-7v9k2m4q/bracket"
               className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-blue-500 hover:bg-blue-400 text-slate-950 shadow-lg shadow-blue-500/20 transition-all"
@@ -359,6 +358,19 @@ export default function AdminTeamsPage() {
               <span>View Bracket Tree</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
+            <button
+              onClick={() => {
+                if (confirm('Rebuild and update the tournament bracket with all currently registered teams?')) {
+                  handleConfirmRosterAndBuildBracket(true);
+                }
+              }}
+              disabled={loading}
+              className="px-3.5 py-2.5 rounded-xl text-xs font-bold bg-blue-500/20 hover:bg-blue-500 hover:text-black text-blue-300 border border-blue-500/40 transition-all flex items-center gap-1.5"
+              title="Update and rebuild bracket with latest roster"
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>Update Bracket</span>
+            </button>
             <button
               onClick={() => setIsResetModalOpen(true)}
               className="px-3.5 py-2.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-blue-950/60 hover:text-blue-400 text-slate-300 border border-white/10 transition-colors flex items-center gap-1.5"
@@ -464,12 +476,19 @@ export default function AdminTeamsPage() {
                       </div>
                     )}
                   </td>
-                  <td className="py-3 px-4 font-bold text-white">
-                    {team.name}
-                    {team.isWithdrawn && (
-                      <span className="ml-2 text-[9px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                        WITHDRAWN
-                      </span>
+                  <td className="py-3 px-4">
+                    <div className="font-bold text-white flex items-center gap-2">
+                      <span>{team.name}</span>
+                      {team.isWithdrawn && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                          WITHDRAWN
+                        </span>
+                      )}
+                    </div>
+                    {team.robotName && (
+                      <div className="text-[11px] text-blue-400 font-mono mt-0.5">
+                        🤖 {team.robotName}
+                      </div>
                     )}
                   </td>
                   <td className="py-3 px-4 text-slate-400">
@@ -502,23 +521,13 @@ export default function AdminTeamsPage() {
                         <Edit className="w-4 h-4" />
                       </button>
 
-                      {isLocked ? (
-                        <button
-                          disabled
-                          title="Cannot delete team while tournament is locked. Reset bracket to unlock."
-                          className="p-1.5 rounded-lg text-slate-600 cursor-not-allowed opacity-50"
-                        >
-                          <Lock className="w-4 h-4" />
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleDeleteTeam(team)}
-                          title="Delete Team"
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-blue-400 hover:bg-blue-500/10"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handleDeleteTeam(team)}
+                        title={isLocked ? "Delete Team & Update Bracket" : "Delete Team"}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -545,18 +554,32 @@ export default function AdminTeamsPage() {
             </div>
 
             <form onSubmit={handleSaveTeam} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Team Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  placeholder="e.g. Chronos Dynamics"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/10 text-white text-xs focus:outline-none focus:border-blue-400"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Team Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    placeholder="e.g. Terminators"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/10 text-white text-xs focus:outline-none focus:border-blue-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Robot Name / Model
+                  </label>
+                  <input
+                    type="text"
+                    value={formRobotName}
+                    onChange={(e) => setFormRobotName(e.target.value)}
+                    placeholder="e.g. Crusher MK-2"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/10 text-white text-xs focus:outline-none focus:border-blue-400"
+                  />
+                </div>
               </div>
 
               <ImageUploader
@@ -568,7 +591,7 @@ export default function AdminTeamsPage() {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Faculty / University Department
+                  Faculty / University Department / Org
                 </label>
                 <input
                   type="text"
@@ -589,7 +612,7 @@ export default function AdminTeamsPage() {
                     min="1"
                     value={formSeed}
                     onChange={(e) => setFormSeed(e.target.value)}
-                    placeholder="Optional"
+                    placeholder="Optional (e.g. 1)"
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/10 text-white text-xs focus:outline-none focus:border-blue-400"
                   />
                 </div>
@@ -604,6 +627,19 @@ export default function AdminTeamsPage() {
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-white/5 text-slate-400 text-xs"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Technical Specs / Notes
+                </label>
+                <input
+                  type="text"
+                  value={formNotes}
+                  onChange={(e) => setFormNotes(e.target.value)}
+                  placeholder="e.g. Weight: 18.5kg, Weapon: Vertical Spinner"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/10 text-white text-xs focus:outline-none focus:border-blue-400"
+                />
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-white/10">
@@ -815,7 +851,7 @@ export default function AdminTeamsPage() {
               </button>
               <button
                 type="button"
-                onClick={handleConfirmRosterAndBuildBracket}
+                onClick={() => handleConfirmRosterAndBuildBracket(false)}
                 disabled={loading}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-blue-500 hover:bg-blue-400 text-black shadow-lg shadow-blue-500/20 transition-all disabled:opacity-50"
               >

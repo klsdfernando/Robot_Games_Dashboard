@@ -179,7 +179,8 @@ export default function TournamentTreeGraph({
         const isThreeWay = Boolean(p3) || (m.participants.length >= 3);
 
         const makeTeamBox = (p: MatchParticipant | undefined, slotNumber: number): TeamBoxData => {
-          const isEmpty = !p || !p.team?.id;
+          const isParticipantBye = p?.placeholderText === 'BYE';
+          const isEmpty = (!p || (!p.team?.id && !p.teamId)) && !isParticipantBye;
           const fallbackTeam = p?.teamId
             ? teamsMap.get(p.teamId)
             : p?.team?.name
@@ -194,16 +195,16 @@ export default function TournamentTreeGraph({
 
           return {
             id: p?.team?.id || p?.teamId || undefined,
-            name: p?.team?.name || fallbackTeam?.name || '',
+            name: isParticipantBye ? 'BYE' : (p?.team?.name || fallbackTeam?.name || ''),
             logoUrl: logoUrl || undefined,
             score: p?.score,
             isWinner: Boolean(p?.isWinner || (p?.teamId && m.winnerTeamId === p.teamId)),
-            isBye: isBye && slotNumber === 1,
+            isBye: (isBye && slotNumber === 1) || isParticipantBye,
             seed,
             matchId: m.id,
             status: m.status,
             advancementSource: p?.advancementSource,
-            placeholderText: undefined,
+            placeholderText: p?.placeholderText,
             isEmptySlot: isEmpty,
             slotNumber,
             rawMatch: m
@@ -1278,7 +1279,8 @@ function TeamPill({
   onDragLeave?: (e: React.DragEvent) => void;
   onDrop?: (e: React.DragEvent) => void;
 }) {
-  const isEmpty = team.isEmptySlot || !team.id;
+  const isByeSlot = team.isBye || team.placeholderText === 'BYE' || team.name === 'BYE';
+  const isEmpty = (team.isEmptySlot || !team.id) && !isByeSlot;
   const isWinner = team.isWinner;
   const hasFinalResult = team.status === 'COMPLETED' || team.status === 'BYE';
   const resultTextColor = hasFinalResult
@@ -1290,6 +1292,17 @@ function TeamPill({
         ? 'text-yellow-400'
         : 'text-white'
     : 'text-slate-300';
+
+  if (isByeSlot) {
+    return (
+      <div className="flex items-center justify-between rounded-md border border-dashed border-blue-500/30 bg-blue-950/20 px-2.5 py-1.5 text-xs text-blue-400">
+        <div className="flex items-center gap-1.5 font-bold font-mono text-[10px] bg-blue-500/20 px-1.5 py-0.5 rounded text-blue-300">
+          BYE
+        </div>
+        <span className="text-[10px] text-slate-500 italic">Direct Advance</span>
+      </div>
+    );
+  }
 
   if (isEmpty) {
     return (

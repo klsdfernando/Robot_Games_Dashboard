@@ -193,23 +193,69 @@ export async function syncTeamToSupabase(team: {
     if (error) throw error;
     return { success: true };
   } catch (err: any) {
+    // If Supabase client fails (e.g. key issue), try direct Postgres update
+    try {
+      const { queryPostgres } = await import('@/lib/pg');
+      const match = team.id.match(/\d+$/);
+      const numericNo = match ? parseInt(match[0], 10) : null;
+      if (numericNo !== null) {
+        await queryPostgres(
+          'UPDATE public.teams SET name = $1, organization = $2, logo_url = $3, updated_at = NOW() WHERE team_no = $4 OR id = $4',
+          [team.name, team.organization || null, team.logoUrl || null, numericNo]
+        );
+      } else {
+        await queryPostgres(
+          'UPDATE public.teams SET organization = $1, logo_url = $2, updated_at = NOW() WHERE LOWER(name) = LOWER($3)',
+          [team.organization || null, team.logoUrl || null, team.name.trim()]
+        );
+      }
+      return { success: true };
+    } catch {}
     console.warn('[Supabase Sync Team Error]:', err.message);
     return { success: false, error: err.message };
   }
 }
 
 /**
- * Deletes a team from Supabase, removing race schedule slots first to satisfy foreign keys.
+ * Deletes a team from Supabase and Postgres, removing race schedule slots first to satisfy foreign keys.
  */
-export async function deleteTeamFromSupabase(teamId: string): Promise<{ success: boolean; error?: string }> {
-  const client = getSupabaseAdminClient();
-  if (!client) return { success: false, error: 'Supabase not configured' };
-
+export async function deleteTeamFromSupabase(teamId: string, teamName?: string): Promise<{ success: boolean; error?: string }> {
   try {
-    // Delete any dependent race schedule slots first
-    await client.from('race_schedule').delete().eq('team_id', teamId);
-    const { error } = await client.from('teams').delete().eq('id', teamId);
-    if (error) throw error;
+    // 1. Direct Postgres deletion
+    try {
+      const { queryPostgres } = await import('@/lib/pg');
+      const match = teamId.match(/\d+$/);
+      const numericNo = match ? parseInt(match[0], 10) : null;
+
+      if (numericNo !== null) {
+        await queryPostgres('DELETE FROM public.teams WHERE team_no = $1 OR id = $1', [numericNo]);
+      }
+      if (teamName) {
+        await queryPostgres('DELETE FROM public.teams WHERE LOWER(name) = LOWER($1)', [teamName.trim()]);
+      }
+    } catch (pgErr: any) {
+      console.warn('[PG Delete Team Warning]:', pgErr.message);
+    }
+
+    // 2. Supabase client deletion
+    const client = getSupabaseAdminClient();
+    if (client) {
+      try {
+        await client.from('race_schedule').delete().eq('team_id', teamId);
+      } catch {}
+      const match = teamId.match(/\d+$/);
+      if (match) {
+        try {
+          await client.from('teams').delete().eq('team_no', parseInt(match[0], 10));
+        } catch {}
+      }
+      if (teamName) {
+        try {
+          await client.from('teams').delete().eq('name', teamName.trim());
+        } catch {}
+      }
+    }
+
     return { success: true };
   } catch (err: any) {
     console.warn('[Supabase Delete Team Error]:', err.message);
