@@ -47,23 +47,27 @@ export default function RobotRacePublicPage() {
   }, []);
 
   // Fetch schedule
-  const fetchSchedule = async () => {
+  const fetchSchedule = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
       const res = await fetch('/api/race/schedule');
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load race schedule');
       setSchedule(data.schedule || []);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load race schedule');
+      if (!silent) setError(err instanceof Error ? err.message : 'Failed to load race schedule');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    void Promise.resolve().then(fetchSchedule);
+    fetchSchedule(false);
+    const interval = setInterval(() => {
+      fetchSchedule(true);
+    }, 6000);
+    return () => clearInterval(interval);
   }, []);
 
   // Time Schedule: Filtered list (strictly departure times and teams)

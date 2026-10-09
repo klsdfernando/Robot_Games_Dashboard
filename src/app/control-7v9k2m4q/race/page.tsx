@@ -33,7 +33,11 @@ import {
   Sparkles,
   Link as LinkIcon,
   Database,
-  RefreshCw
+  RefreshCw,
+  GripVertical,
+  ArrowUpDown,
+  SlidersHorizontal,
+  FastForward
 } from 'lucide-react';
 import { RaceScheduleSlot, RaceSlotStatus, Team, RaceCategoryDivision } from '@/lib/types';
 import ImageUploader from '@/components/ImageUploader';
@@ -122,6 +126,24 @@ export default function AdminRobotRacePage() {
   const [importDivision, setImportDivision] = useState<'SCHOOL' | 'UNIVERSITY'>('SCHOOL');
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
+
+  // Hold Drag & Drop state
+  const [draggedSlotId, setDraggedSlotId] = useState<string | null>(null);
+  const [dragOverSlotId, setDragOverSlotId] = useState<string | null>(null);
+  const [dragMode, setDragMode] = useState<'REORDER' | 'SWAP'>('REORDER');
+  const [keepTimesOnDrag, setKeepTimesOnDrag] = useState<boolean>(true);
+
+  // Inline Time Editing state
+  const [editingTimeSlotId, setEditingTimeSlotId] = useState<string | null>(null);
+  const [inlineTimeValue, setInlineTimeValue] = useState<string>('');
+  const [inlineTimeLoading, setInlineTimeLoading] = useState<boolean>(false);
+
+  // Time Tools / Shift Times Modal state
+  const [isTimeToolsModalOpen, setIsTimeToolsModalOpen] = useState(false);
+  const [shiftOffsetMinutes, setShiftOffsetMinutes] = useState<number>(10);
+  const [shiftFromSlot, setShiftFromSlot] = useState<number>(1);
+  const [shiftDivision, setShiftDivision] = useState<'ALL' | 'SCHOOL' | 'UNIVERSITY'>('ALL');
+  const [shiftLoading, setShiftLoading] = useState(false);
 
   // Live clock
   useEffect(() => {
@@ -745,6 +767,237 @@ export default function AdminRobotRacePage() {
     }
   };
 
+  // Helper to add/subtract minutes from a formatted time string (e.g. "09:30 AM")
+  const addMinutesToTime = (timeStr: string, mins: number): string => {
+    try {
+      const clean = (timeStr || '09:00 AM').trim().toUpperCase();
+      const isPM = clean.includes('PM');
+      const isAM = clean.includes('AM');
+      const numbersPart = clean.replace(/[^\d:]/g, '');
+      const [hStr, mStr] = numbersPart.split(':');
+      let hours = parseInt(hStr || '9', 10);
+      let minutes = parseInt(mStr || '0', 10);
+      if (isPM && hours < 12) hours += 12;
+      if (isAM && hours === 12) hours = 0;
+      const totalMinutes = (hours * 60 + minutes + mins + 24 * 60 * 10) % (24 * 60);
+      const newHours = Math.floor(totalMinutes / 60);
+      const newMinutes = totalMinutes % 60;
+      const period = newHours >= 12 ? 'PM' : 'AM';
+      let displayHours = newHours % 12;
+      if (displayHours === 0) displayHours = 12;
+      return `${displayHours.toString().padStart(2, '0')}:${newMinutes.toString().padStart(2, '0')} ${period}`;
+    } catch {
+      return timeStr;
+    }
+  };
+
+  // Inline Time Editing Handlers
+  const handleStartEditTime = (slot: RaceScheduleSlot) => {
+    setEditingTimeSlotId(slot.id);
+    setInlineTimeValue(slot.scheduledTime);
+  };
+
+  const handleCancelInlineTime = () => {
+    setEditingTimeSlotId(null);
+    setInlineTimeValue('');
+  };
+
+  const handleAdjustInlineTime = (mins: number) => {
+    setInlineTimeValue(prev => addMinutesToTime(prev, mins));
+  };
+
+  const handleSaveInlineTime = async (slotId: string) => {
+    if (!inlineTimeValue.trim()) return;
+    setInlineTimeLoading(true);
+    const newTime = inlineTimeValue.trim();
+    try {
+      // Optimistic update
+      setSchedule(prev => prev.map(s => s.id === slotId ? { ...s, scheduledTime: newTime } : s));
+      setEditingTimeSlotId(null);
+
+      const res = await fetch(`/api/race/schedule/${slotId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduledTime: newTime })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update departure time');
+      setSuccess(`Departure time updated to ${newTime}`);
+      await fetchSchedule();
+    } catch (err: any) {
+      setError(err.message);
+      await fetchSchedule();
+    } finally {
+      setInlineTimeLoading(false);
+    }
+  };
+
+  // Hold Drag & Drop Handlers
+  const handleDragStart = (e: React.DragEvent, slot: RaceScheduleSlot) => {
+    if (editingTimeSlotId) {
+      e.preventDefault();
+      return;
+    }
+    setDraggedSlotId(slot.id);
+    e.dataTransfer.setData('text/plain', slot.id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, slot: RaceScheduleSlot) => {
+    if (!draggedSlotId || draggedSlotId === slot.id) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverSlotId !== slot.id) {
+      setDragOverSlotId(slot.id);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent, slot: RaceScheduleSlot) => {
+    if (dragOverSlotId === slot.id) {
+      setDragOverSlotId(null);
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDraggedSlotId(null);
+    setDragOverSlotId(null);
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetSlot: RaceScheduleSlot) => {
+    e.preventDefault();
+    const sourceSlotId = draggedSlotId;
+    setDraggedSlotId(null);
+    setDragOverSlotId(null);
+
+    if (!sourceSlotId || sourceSlotId === targetSlot.id) return;
+
+    const sourceSlot = schedule.find(s => s.id === sourceSlotId);
+    if (!sourceSlot) return;
+
+    if (dragMode === 'SWAP') {
+      // SWAP MODE
+      const updated = schedule.map(s => {
+        if (s.id === sourceSlot.id) {
+          return {
+            ...s,
+            slotNumber: keepTimesOnDrag ? targetSlot.slotNumber : s.slotNumber,
+            scheduledTime: keepTimesOnDrag ? targetSlot.scheduledTime : s.scheduledTime
+          };
+        }
+        if (s.id === targetSlot.id) {
+          return {
+            ...s,
+            slotNumber: keepTimesOnDrag ? sourceSlot.slotNumber : s.slotNumber,
+            scheduledTime: keepTimesOnDrag ? sourceSlot.scheduledTime : s.scheduledTime
+          };
+        }
+        return s;
+      }).sort((a, b) => a.slotNumber - b.slotNumber);
+
+      setSchedule(updated);
+      setSuccess(`Swapped Slot #${sourceSlot.slotNumber} (${sourceSlot.teamName}) with Slot #${targetSlot.slotNumber} (${targetSlot.teamName})`);
+
+      try {
+        const res = await fetch('/api/race/schedule/reorder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'swap',
+            slot1Id: sourceSlot.id,
+            slot2Id: targetSlot.id,
+            keepTimes: keepTimesOnDrag,
+            division: scheduleDivisionFilter
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to swap race slots');
+        if (data.schedule) setSchedule(data.schedule);
+      } catch (err: any) {
+        setError(err.message);
+        await fetchSchedule();
+      }
+    } else {
+      // REORDER MODE
+      const sourceIndex = schedule.findIndex(s => s.id === sourceSlot.id);
+      const targetIndex = schedule.findIndex(s => s.id === targetSlot.id);
+      if (sourceIndex === -1 || targetIndex === -1) return;
+
+      const newItems = [...schedule];
+      const [moved] = newItems.splice(sourceIndex, 1);
+      newItems.splice(targetIndex, 0, moved);
+
+      // Reassign slot numbers and optionally times
+      const reorderedWithSlots = newItems.map((item, idx) => {
+        const originalSlotAtThisPosition = schedule[idx];
+        return {
+          ...item,
+          slotNumber: idx + 1,
+          scheduledTime: keepTimesOnDrag && originalSlotAtThisPosition ? originalSlotAtThisPosition.scheduledTime : item.scheduledTime
+        };
+      });
+
+      setSchedule(reorderedWithSlots);
+      setSuccess(`Moved ${sourceSlot.teamName} to Slot #${targetIndex + 1} (${reorderedWithSlots[targetIndex]?.scheduledTime || ''})`);
+
+      try {
+        const res = await fetch('/api/race/schedule/reorder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            slots: reorderedWithSlots.map(s => ({
+              id: s.id,
+              slotNumber: s.slotNumber,
+              scheduledTime: s.scheduledTime
+            }))
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to save reordered schedule');
+        if (data.schedule) setSchedule(data.schedule);
+      } catch (err: any) {
+        setError(err.message);
+        await fetchSchedule();
+      }
+    }
+  };
+
+  // Shift Times Handler
+  const handleApplyShiftTimes = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!shiftOffsetMinutes && shiftOffsetMinutes !== 0) {
+      setError('Please provide a valid offset in minutes');
+      return;
+    }
+
+    setShiftLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/race/schedule/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'shift',
+          offsetMinutes: Number(shiftOffsetMinutes),
+          fromSlotNumber: shiftFromSlot ? Number(shiftFromSlot) : undefined,
+          division: shiftDivision
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to shift schedule times');
+      if (data.schedule) {
+        setSchedule(data.schedule);
+      } else {
+        await fetchSchedule();
+      }
+      setSuccess(`Shifted schedule by ${shiftOffsetMinutes > 0 ? '+' : ''}${shiftOffsetMinutes} minutes!`);
+      setIsTimeToolsModalOpen(false);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setShiftLoading(false);
+    }
+  };
+
   // Excel Import Handler
   const handleImportExcel = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1292,7 +1545,47 @@ export default function AdminRobotRacePage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              {/* Drag Mode Switcher */}
+              <div className="flex items-center bg-black/40 p-1 rounded-xl border border-white/10" title="Drag & Drop Mode">
+                <button
+                  type="button"
+                  onClick={() => setDragMode('REORDER')}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    dragMode === 'REORDER'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <ArrowUpDown className="w-3.5 h-3.5" />
+                  <span>Reorder</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDragMode('SWAP')}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    dragMode === 'SWAP'
+                      ? 'bg-amber-400 text-black shadow-sm font-black'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Swap</span>
+                </button>
+              </div>
+
+              {/* Shift Times Tool Button */}
               <button
+                type="button"
+                onClick={() => setIsTimeToolsModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-blue-300 border border-blue-500/30 hover:border-blue-500/50 transition-all shadow-sm"
+                title="Shift race times (+5m, +10m, +15m...)"
+              >
+                <Clock className="w-3.5 h-3.5 text-blue-400" />
+                <span>Shift Times</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setIsGenerateModalOpen(true)}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-blue-500 to-blue-400 text-black hover:opacity-90 transition-opacity"
               >
@@ -1301,6 +1594,7 @@ export default function AdminRobotRacePage() {
               </button>
 
               <button
+                type="button"
                 onClick={handleOpenAddSlotModal}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-slate-200 border border-white/10 transition-colors"
               >
@@ -1310,6 +1604,7 @@ export default function AdminRobotRacePage() {
 
               {schedule.length > 0 && (
                 <button
+                  type="button"
                   onClick={handleClearSchedule}
                   className="p-2 rounded-xl bg-slate-900 hover:bg-blue-950/60 text-slate-400 hover:text-blue-400 border border-white/10 transition-colors"
                   title="Clear Schedule"
@@ -1319,6 +1614,28 @@ export default function AdminRobotRacePage() {
               )}
             </div>
           </div>
+
+          {/* Interactive Feature Hints Bar */}
+          {schedule.length > 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-2.5 rounded-2xl bg-slate-900/60 border border-white/10 text-xs text-slate-300">
+              <div className="flex items-center gap-2">
+                <GripVertical className="w-4 h-4 text-blue-400 shrink-0" />
+                <span>
+                  <strong className="text-white font-bold">Hold & Drag</strong> any row to {dragMode === 'REORDER' ? 'reorder lineup' : 'swap slots'}. 
+                  Click any <strong className="text-blue-400 font-bold">Departure Time</strong> to change it directly!
+                </span>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer select-none text-[11px] text-slate-400 hover:text-white">
+                <input
+                  type="checkbox"
+                  checked={keepTimesOnDrag}
+                  onChange={(e) => setKeepTimesOnDrag(e.target.checked)}
+                  className="rounded bg-slate-900 border-white/20 text-blue-500 text-xs"
+                />
+                <span>Preserve chronological slot times</span>
+              </label>
+            </div>
+          )}
 
           {/* Schedule Table */}
           {loading ? (
@@ -1334,6 +1651,7 @@ export default function AdminRobotRacePage() {
                 Generate an automated departure schedule or add slots manually.
               </p>
               <button
+                type="button"
                 onClick={() => setIsGenerateModalOpen(true)}
                 className="px-4 py-2 rounded-xl text-xs font-bold bg-blue-500 text-black hover:bg-blue-400 transition-colors"
               >
@@ -1345,11 +1663,15 @@ export default function AdminRobotRacePage() {
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-900/90 text-slate-400 uppercase font-semibold text-[10px] tracking-wider border-b border-white/10">
                   <tr>
+                    <th className="py-3 px-3 w-10 text-center" title="Hold & drag to reorder">
+                      <GripVertical className="w-3.5 h-3.5 mx-auto text-slate-500" />
+                    </th>
                     <th className="py-3 px-4">Slot</th>
                     <th className="py-3 px-4">Category</th>
-                    <th className="py-3 px-4">Assigned Time</th>
+                    <th className="py-3 px-4">Assigned Departure Time</th>
                     <th className="py-3 px-4">Logo</th>
                     <th className="py-3 px-4">Team Name</th>
+                    <th className="py-3 px-4">Faculty / Department</th>
                     <th className="py-3 px-4">Track</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4 text-right">Admin Actions</th>
@@ -1358,13 +1680,51 @@ export default function AdminRobotRacePage() {
                 <tbody className="divide-y divide-white/5 text-slate-300">
                   {filteredSchedule.map((slot) => {
                     const isSchool = slot.categoryDivision === 'SCHOOL';
+                    const isDragging = draggedSlotId === slot.id;
+                    const isDragOver = dragOverSlotId === slot.id;
 
                     return (
-                      <tr key={slot.id} className="hover:bg-white/5 transition-colors">
-                        <td className="py-3 px-4 font-mono font-bold text-slate-400">
-                          #{slot.slotNumber}
+                      <tr 
+                        key={slot.id} 
+                        draggable={editingTimeSlotId !== slot.id}
+                        onDragStart={(e) => handleDragStart(e, slot)}
+                        onDragOver={(e) => handleDragOver(e, slot)}
+                        onDragLeave={(e) => handleDragLeave(e, slot)}
+                        onDrop={(e) => handleDrop(e, slot)}
+                        onDragEnd={handleDragEnd}
+                        className={`transition-all select-none ${
+                          isDragging
+                            ? 'opacity-35 scale-[0.99] border-dashed border-2 border-blue-400 bg-blue-950/40'
+                            : isDragOver
+                            ? 'border-2 border-blue-400 bg-blue-500/20 ring-2 ring-blue-400/50 shadow-[0_0_20px_rgba(59,130,246,0.35)]'
+                            : 'hover:bg-white/5'
+                        }`}
+                      >
+                        {/* Drag Handle */}
+                        <td className="py-3 px-3 text-center w-10">
+                          <div 
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-white/5 cursor-grab active:cursor-grabbing transition-colors inline-block"
+                            title="Hold & drag to reorder or swap this race"
+                          >
+                            <GripVertical className="w-4 h-4" />
+                          </div>
                         </td>
 
+                        {/* Slot Number */}
+                        <td className="py-3 px-4 font-mono font-bold text-slate-400 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <span>#{slot.slotNumber}</span>
+                            {isDragOver && (
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
+                                dragMode === 'SWAP' ? 'bg-amber-400 text-black' : 'bg-blue-500 text-black'
+                              }`}>
+                                {dragMode === 'SWAP' ? 'Swap' : 'Place Here'}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Category */}
                         <td className="py-3 px-4 whitespace-nowrap">
                           {isSchool ? (
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
@@ -1377,13 +1737,88 @@ export default function AdminRobotRacePage() {
                           )}
                         </td>
 
+                        {/* Assigned Departure Time (Inline Editable) */}
                         <td className="py-3 px-4 font-mono font-black text-sm whitespace-nowrap text-white">
-                          <div className="flex items-center gap-1.5">
-                            <Clock className="w-3.5 h-3.5 text-blue-400" />
-                            <span>{slot.scheduledTime}</span>
-                          </div>
+                          {editingTimeSlotId === slot.id ? (
+                            <div className="flex items-center gap-1.5 bg-slate-950/95 p-1.5 rounded-xl border border-blue-500/70 shadow-2xl">
+                              <input
+                                type="text"
+                                value={inlineTimeValue}
+                                onChange={(e) => setInlineTimeValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleSaveInlineTime(slot.id);
+                                  if (e.key === 'Escape') handleCancelInlineTime();
+                                }}
+                                placeholder="09:30 AM"
+                                autoFocus
+                                className="w-24 px-2 py-1 rounded-lg bg-slate-900 border border-white/20 text-white font-mono text-xs font-bold focus:outline-none focus:border-blue-400"
+                              />
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleAdjustInlineTime(-15)}
+                                  className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-white/5 hover:bg-white/10 text-slate-300 transition-colors"
+                                  title="Minus 15 minutes"
+                                >
+                                  -15m
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAdjustInlineTime(-5)}
+                                  className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-white/5 hover:bg-white/10 text-slate-300 transition-colors"
+                                  title="Minus 5 minutes"
+                                >
+                                  -5m
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAdjustInlineTime(5)}
+                                  className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-white/5 hover:bg-white/10 text-slate-300 transition-colors"
+                                  title="Plus 5 minutes"
+                                >
+                                  +5m
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAdjustInlineTime(15)}
+                                  className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-white/5 hover:bg-white/10 text-slate-300 transition-colors"
+                                  title="Plus 15 minutes"
+                                >
+                                  +15m
+                                </button>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleSaveInlineTime(slot.id)}
+                                disabled={inlineTimeLoading}
+                                className="p-1.5 rounded-lg bg-blue-500 hover:bg-blue-400 text-black font-bold transition-colors"
+                                title="Save Time (Enter)"
+                              >
+                                {inlineTimeLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleCancelInlineTime}
+                                className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                                title="Cancel (Esc)"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div
+                              onClick={() => handleStartEditTime(slot)}
+                              className="group/time inline-flex items-center gap-1.5 px-2 py-1 -ml-1 rounded-lg hover:bg-blue-500/15 hover:border hover:border-blue-500/40 cursor-pointer transition-all border border-transparent"
+                              title="Click to quickly change departure time"
+                            >
+                              <Clock className="w-3.5 h-3.5 text-blue-400 group-hover/time:text-blue-300 transition-colors" />
+                              <span className="group-hover/time:text-blue-200 transition-colors">{slot.scheduledTime}</span>
+                              <Edit className="w-3 h-3 text-slate-500 opacity-0 group-hover/time:opacity-100 transition-opacity ml-0.5" />
+                            </div>
+                          )}
                         </td>
 
+                        {/* Logo */}
                         <td className="py-3 px-4">
                           {slot.logoUrl ? (
                             <img
@@ -1398,14 +1833,22 @@ export default function AdminRobotRacePage() {
                           )}
                         </td>
 
+                        {/* Team Name */}
                         <td className="py-3 px-4 font-bold text-white whitespace-nowrap">
                           {slot.teamName}
                         </td>
 
+                        {/* Faculty / Department */}
+                        <td className="py-3 px-4 text-slate-400 whitespace-nowrap">
+                          {slot.organization || '—'}
+                        </td>
+
+                        {/* Track */}
                         <td className="py-3 px-4 font-mono text-slate-400 whitespace-nowrap">
                           {slot.track || 'Track 1'}
                         </td>
 
+                        {/* Status */}
                         <td className="py-3 px-4 whitespace-nowrap">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                             slot.status === 'COMPLETED'
@@ -1416,10 +1859,12 @@ export default function AdminRobotRacePage() {
                           </span>
                         </td>
 
+                        {/* Admin Actions */}
                         <td className="py-3 px-4 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
                             {slot.status === 'SCHEDULED' ? (
                               <button
+                                type="button"
                                 onClick={() => handleSetStatus(slot, 'COMPLETED')}
                                 className="px-2 py-1 rounded-lg text-[11px] font-semibold bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition-colors"
                               >
@@ -1427,6 +1872,7 @@ export default function AdminRobotRacePage() {
                               </button>
                             ) : (
                               <button
+                                type="button"
                                 onClick={() => handleSetStatus(slot, 'SCHEDULED')}
                                 className="px-2 py-1 rounded-lg text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
                               >
@@ -1434,13 +1880,15 @@ export default function AdminRobotRacePage() {
                               </button>
                             )}
                             <button
+                              type="button"
                               onClick={() => handleOpenEditSlot(slot)}
-                              title="Edit Slot Time"
+                              title="Full Edit Slot"
                               className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10"
                             >
                               <Edit className="w-3.5 h-3.5" />
                             </button>
                             <button
+                              type="button"
                               onClick={() => handleDeleteSlot(slot.id)}
                               title="Delete Slot"
                               className="p-1.5 rounded-lg text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
@@ -2353,6 +2801,162 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+      {/* ========================================================================= */}
+      {/* MODAL 7: SHIFT DEPARTURE TIMES (SCHEDULE ADJUSTER)                         */}
+      {/* ========================================================================= */}
+      {isTimeToolsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-md bg-[#0d1527] border border-white/10 rounded-2xl shadow-2xl overflow-hidden text-slate-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-slate-900/60">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-blue-400" />
+                <h3 className="font-bold text-white text-base">Shift Departure Times</h3>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setIsTimeToolsModalOpen(false)} 
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleApplyShiftTimes} className="p-6 space-y-4 text-xs">
+              <div>
+                <span className="block text-xs font-semibold text-slate-300 mb-2">
+                  Quick Shift Presets
+                </span>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[5, 10, 15, 30].map(mins => (
+                    <button
+                      key={`plus-${mins}`}
+                      type="button"
+                      onClick={() => setShiftOffsetMinutes(mins)}
+                      className={`py-1.5 px-2 rounded-xl text-xs font-bold transition-all border ${
+                        shiftOffsetMinutes === mins
+                          ? 'bg-blue-600 text-white border-blue-400 shadow-sm'
+                          : 'bg-slate-900/80 text-slate-300 border-white/10 hover:border-blue-500/40'
+                      }`}
+                    >
+                      +{mins}m
+                    </button>
+                  ))}
+                  {[-5, -10, -15, -30].map(mins => (
+                    <button
+                      key={`minus-${mins}`}
+                      type="button"
+                      onClick={() => setShiftOffsetMinutes(mins)}
+                      className={`py-1.5 px-2 rounded-xl text-xs font-bold transition-all border ${
+                        shiftOffsetMinutes === mins
+                          ? 'bg-amber-500 text-black border-amber-400 shadow-sm font-black'
+                          : 'bg-slate-900/80 text-slate-300 border-white/10 hover:border-amber-500/40'
+                      }`}
+                    >
+                      {mins}m
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Custom Offset (minutes)
+                </label>
+                <input
+                  type="number"
+                  value={shiftOffsetMinutes}
+                  onChange={(e) => setShiftOffsetMinutes(parseInt(e.target.value, 10) || 0)}
+                  placeholder="e.g. 10 or -15"
+                  className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-blue-400"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Positive values delay races; negative values advance them.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Apply From Slot
+                  </label>
+                  <select
+                    value={shiftFromSlot}
+                    onChange={(e) => setShiftFromSlot(Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-xs focus:outline-none focus:border-blue-400"
+                  >
+                    <option value={1}>From Start (Slot #1)</option>
+                    {schedule.map(s => (
+                      <option key={s.id} value={s.slotNumber}>
+                        Slot #{s.slotNumber} ({s.teamName})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Division
+                  </label>
+                  <select
+                    value={shiftDivision}
+                    onChange={(e) => setShiftDivision(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-white/10 text-white text-xs focus:outline-none focus:border-blue-400"
+                  >
+                    <option value="ALL">All Categories</option>
+                    <option value="SCHOOL">School Division Only</option>
+                    <option value="UNIVERSITY">University Division Only</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Live Preview */}
+              {schedule.length > 0 && (
+                <div className="p-3 rounded-xl bg-slate-900/90 border border-white/5 space-y-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                    Schedule Preview
+                  </span>
+                  <div className="space-y-1 font-mono text-[11px]">
+                    {schedule
+                      .filter(s => s.slotNumber >= shiftFromSlot && (shiftDivision === 'ALL' || s.categoryDivision === shiftDivision))
+                      .slice(0, 3)
+                      .map(s => {
+                        const newTime = addMinutesToTime(s.scheduledTime, shiftOffsetMinutes);
+                        return (
+                          <div key={s.id} className="flex items-center justify-between text-slate-300">
+                            <span className="truncate max-w-[150px]">#{s.slotNumber} {s.teamName}</span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-slate-500 line-through">{s.scheduledTime}</span>
+                              <ArrowRight className="w-3 h-3 text-blue-400" />
+                              <span className="font-bold text-blue-300">{newTime}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setIsTimeToolsModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={shiftLoading}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-blue-500 hover:bg-blue-400 text-black transition-colors"
+                >
+                  {shiftLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Apply Shift</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

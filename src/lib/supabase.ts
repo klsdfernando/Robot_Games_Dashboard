@@ -310,6 +310,42 @@ export async function syncRaceSlotToSupabase(slot: {
 }
 
 /**
+ * Upserts a batch of race schedule slots to Supabase.
+ */
+export async function syncRaceScheduleBatchToSupabase(slots: any[]): Promise<{ success: boolean; error?: string }> {
+  const client = getSupabaseAdminClient();
+  if (!client) return { success: false, error: 'Supabase not configured' };
+  if (!slots || slots.length === 0) return { success: true };
+
+  try {
+    const rows = slots.map(slot => ({
+      id: slot.id,
+      team_id: slot.teamId || null,
+      team_name: slot.teamName,
+      robot_name: slot.robotName || null,
+      organization: slot.organization || null,
+      logo_url: slot.logoUrl || null,
+      category_division: slot.categoryDivision || 'SCHOOL',
+      slot_number: slot.slotNumber,
+      scheduled_time: slot.scheduledTime || '09:30 AM',
+      status: slot.status || 'SCHEDULED',
+      track: slot.track || 'Track 1',
+      time_recorded: slot.timeRecorded || null,
+      score: slot.score !== undefined ? slot.score : null,
+      notes: slot.notes || null,
+      updated_at: new Date().toISOString()
+    }));
+
+    const { error } = await client.from('race_schedule').upsert(rows, { onConflict: 'id' });
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.warn('[Supabase Batch Sync Race Schedule Error]:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
  * Deletes a race schedule slot from Supabase.
  */
 export async function deleteRaceSlotFromSupabase(slotId: string): Promise<{ success: boolean; error?: string }> {

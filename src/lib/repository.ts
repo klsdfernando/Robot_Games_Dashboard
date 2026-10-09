@@ -2673,6 +2673,103 @@ export function clearRaceSchedule(division?: 'ALL' | 'SCHOOL' | 'UNIVERSITY'): b
   return true;
 }
 
+export function addMinutesToTimeString(timeStr: string, minutesToAdd: number): string {
+  const { hours, minutes } = parseTimeString(timeStr);
+  const totalMinutes = (hours * 60 + minutes + minutesToAdd + 24 * 60 * 10) % (24 * 60);
+  const newHours = Math.floor(totalMinutes / 60);
+  const newMinutes = totalMinutes % 60;
+  return formatTimeSlot(newHours, newMinutes);
+}
+
+export function reorderRaceScheduleSlots(
+  orderedSlots: { id: string; slotNumber: number; scheduledTime?: string }[]
+): RaceScheduleSlot[] {
+  const now = new Date().toISOString();
+  const updateStmt = db.prepare(`
+    UPDATE race_schedule
+    SET slot_number = ?,
+        scheduled_time = COALESCE(?, scheduled_time),
+        updated_at = ?
+    WHERE id = ?
+  `);
+
+  const tx = db.transaction((slots: { id: string; slotNumber: number; scheduledTime?: string }[]) => {
+    for (const slot of slots) {
+      updateStmt.run(slot.slotNumber, slot.scheduledTime || null, now, slot.id);
+    }
+  });
+
+  tx(orderedSlots);
+  return getRaceSchedule();
+}
+
+export function shiftRaceScheduleTimes(
+  offsetMinutes: number,
+  fromSlotNumber?: number,
+  division?: 'ALL' | 'SCHOOL' | 'UNIVERSITY'
+): RaceScheduleSlot[] {
+  const slots = getRaceSchedule(division);
+  const targetSlots = fromSlotNumber
+    ? slots.filter(s => s.slotNumber >= fromSlotNumber)
+    : slots;
+
+  const now = new Date().toISOString();
+  const updateStmt = db.prepare(`
+    UPDATE race_schedule
+    SET scheduled_time = ?,
+        updated_at = ?
+    WHERE id = ?
+  `);
+
+  const tx = db.transaction(() => {
+    for (const slot of targetSlots) {
+      const newTime = addMinutesToTimeString(slot.scheduledTime, offsetMinutes);
+      updateStmt.run(newTime, now, slot.id);
+    }
+  });
+
+  tx();
+  return getRaceSchedule(division);
+}
+
+export function swapRaceScheduleSlots(
+  id1: string,
+  id2: string,
+  keepTimes: boolean = true
+): { slot1: RaceScheduleSlot; slot2: RaceScheduleSlot } | null {
+  const s1 = getRaceScheduleById(id1);
+  const s2 = getRaceScheduleById(id2);
+  if (!s1 || !s2) return null;
+
+  const now = new Date().toISOString();
+  const updateStmt = db.prepare(`
+    UPDATE race_schedule
+    SET slot_number = ?,
+        scheduled_time = ?,
+        updated_at = ?
+    WHERE id = ?
+  `);
+
+  const tx = db.transaction(() => {
+    if (keepTimes) {
+      // Slot numbers and times stay fixed in position, but their assignments swap:
+      // s1 takes s2's slot_number and s2's scheduled_time
+      // s2 takes s1's slot_number and s1's scheduled_time
+      updateStmt.run(s2.slotNumber, s2.scheduledTime, now, s1.id);
+      updateStmt.run(s1.slotNumber, s1.scheduledTime, now, s2.id);
+    } else {
+      // Only swap slot numbers, preserving each team's assigned departure time
+      updateStmt.run(s2.slotNumber, s1.scheduledTime, now, s1.id);
+      updateStmt.run(s1.slotNumber, s2.scheduledTime, now, s2.id);
+    }
+  });
+
+  tx();
+  const updated1 = getRaceScheduleById(id1)!;
+  const updated2 = getRaceScheduleById(id2)!;
+  return { slot1: updated1, slot2: updated2 };
+}
+
 // -------------------------------------------------------------
 // ROBOT RACE TEAMS (SCHOOL & UNIVERSITY DIVISIONS)
 // -------------------------------------------------------------
