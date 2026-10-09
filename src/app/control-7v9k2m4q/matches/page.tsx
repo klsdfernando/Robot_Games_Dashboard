@@ -270,8 +270,8 @@ export default function AdminMatchesPage() {
               {liveMatch.participants.length === 3 ? (
                 <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 py-1">
                   {liveMatch.participants.map((p, idx) => {
-                    const corner = idx === 0 ? 'red' : idx === 1 ? 'blue' : 'green';
-                    const cornerBg = idx === 0 ? 'bg-red-500' : idx === 1 ? 'bg-blue-500' : 'bg-emerald-500';
+                    const corner = idx === 0 ? 'red' : idx === 1 ? 'blue' : 'yellow';
+                    const cornerBg = idx === 0 ? 'bg-red-500' : idx === 1 ? 'bg-blue-500' : 'bg-yellow-400 shadow-[0_0_12px_rgba(250,204,21,0.7)]';
                     return (
                       <React.Fragment key={p.id || idx}>
                         {idx > 0 && (
@@ -403,8 +403,8 @@ export default function AdminMatchesPage() {
               {upNextMatch.participants.length === 3 ? (
                 <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 py-1">
                   {upNextMatch.participants.map((p, idx) => {
-                    const corner = idx === 0 ? 'red' : idx === 1 ? 'blue' : 'green';
-                    const cornerBg = idx === 0 ? 'bg-red-500/70' : idx === 1 ? 'bg-blue-500/70' : 'bg-emerald-500/70';
+                    const corner = idx === 0 ? 'red' : idx === 1 ? 'blue' : 'yellow';
+                    const cornerBg = idx === 0 ? 'bg-red-500/70' : idx === 1 ? 'bg-blue-500/70' : 'bg-yellow-400/80 shadow-[0_0_12px_rgba(250,204,21,0.7)]';
                     return (
                       <React.Fragment key={p.id || idx}>
                         {idx > 0 && (

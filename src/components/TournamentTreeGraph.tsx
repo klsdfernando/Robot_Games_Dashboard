@@ -1187,7 +1187,7 @@ function BracketMatchBlock({
             {match.winnerTeam && (
               <span className="text-slate-400 flex items-center">
                 <span>├──▶</span>
-                <span className={`${isWildcard ? 'text-white' : 'text-emerald-400'} ml-1 max-w-[110px] truncate font-bold`}>
+                <span className={`${isWildcard ? 'text-white' : 'text-yellow-400'} ml-1 max-w-[110px] truncate font-bold`}>
                   {match.winnerTeam.name}
                 </span>
               </span>
@@ -1279,7 +1279,7 @@ function TeamPill({
         ? 'text-white'
         : 'text-red-400'
       : isWinner
-        ? 'text-emerald-400'
+        ? 'text-yellow-400'
         : 'text-white'
     : 'text-slate-300';
 

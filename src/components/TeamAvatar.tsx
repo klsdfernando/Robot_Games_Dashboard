@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 export interface TeamAvatarProps {
   logoUrl?: string | null;
   name?: string | null;
-  cornerColor?: 'red' | 'blue' | 'green' | 'none';
+  cornerColor?: 'red' | 'blue' | 'yellow' | 'green' | 'none';
   size?: 'hero' | 'lg' | 'md' | 'sm' | 'xs';
   badge?: string | number | null;
   className?: string;
@@ -68,10 +68,15 @@ export default function TeamAvatar({
       fallback: 'bg-blue-500/15 text-blue-300 ring-2 ring-blue-500/80 shadow-[0_0_20px_rgba(59,130,246,0.35)]',
       badge: 'bg-blue-500/20 text-blue-300 border border-blue-500/40 shadow-[0_2px_8px_rgba(59,130,246,0.3)]'
     },
+    yellow: {
+      ring: 'ring-2 ring-yellow-400 shadow-[0_0_25px_rgba(250,204,21,0.55)]',
+      fallback: 'bg-yellow-400/15 text-yellow-300 ring-2 ring-yellow-400/80 shadow-[0_0_20px_rgba(250,204,21,0.35)]',
+      badge: 'bg-yellow-400/20 text-yellow-300 border border-yellow-400/40 shadow-[0_2px_8px_rgba(250,204,21,0.3)]'
+    },
     green: {
-      ring: 'ring-2 ring-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.45)]',
-      fallback: 'bg-emerald-500/15 text-emerald-300 ring-2 ring-emerald-500/80 shadow-[0_0_20px_rgba(16,185,129,0.35)]',
-      badge: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-[0_2px_8px_rgba(16,185,129,0.3)]'
+      ring: 'ring-2 ring-yellow-400 shadow-[0_0_25px_rgba(250,204,21,0.55)]',
+      fallback: 'bg-yellow-400/15 text-yellow-300 ring-2 ring-yellow-400/80 shadow-[0_0_20px_rgba(250,204,21,0.35)]',
+      badge: 'bg-yellow-400/20 text-yellow-300 border border-yellow-400/40 shadow-[0_2px_8px_rgba(250,204,21,0.3)]'
     },
     none: {
       ring: 'ring-1 ring-white/15 shadow-md',

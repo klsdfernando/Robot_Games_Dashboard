@@ -32,13 +32,13 @@ function getTeamInitials(name?: string): string {
 function getCornerBorderClass(idx: number): string {
   if (idx === 0) return 'bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.7)]';
   if (idx === 1) return 'bg-blue-500 shadow-[0_0_12px_rgba(59,130,246,0.7)]';
-  return 'bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.7)]';
+  return 'bg-yellow-400 shadow-[0_0_12px_rgba(250,204,21,0.7)]';
 }
 
 function getCornerBadgeStyle(idx: number): string {
   if (idx === 0) return 'bg-red-500/15 text-red-400 border border-red-500/30';
   if (idx === 1) return 'bg-blue-500/15 text-blue-400 border border-blue-500/30';
-  return 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30';
+  return 'bg-yellow-400/15 text-yellow-300 border border-yellow-400/30';
 }
 
 function getLiveNameSize(name: string): string {
@@ -58,7 +58,7 @@ function getUpNextNameSize(name: string): string {
 interface TeamFaceoffLogoProps {
   logoUrl?: string | null;
   name?: string;
-  cornerColor: 'red' | 'blue' | 'green';
+  cornerColor: 'red' | 'blue' | 'yellow' | 'green';
   size?: 'lg' | 'sm';
   badge?: string | number | null;
 }
@@ -341,7 +341,7 @@ export default function HomePage() {
                       return (
                         <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 my-auto py-2">
                           {participantsToShow.map((p, idx) => {
-                            const corner = idx === 0 ? 'red' : idx === 1 ? 'blue' : 'green';
+                            const corner = idx === 0 ? 'red' : idx === 1 ? 'blue' : 'yellow';
                             return (
                               <React.Fragment key={p.id}>
                                 {idx > 0 && (
@@ -494,7 +494,7 @@ export default function HomePage() {
                       return (
                         <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 my-auto py-2">
                           {validParticipants.map((p, idx) => {
-                            const corner = idx === 0 ? 'red' : idx === 1 ? 'blue' : 'green';
+                            const corner = idx === 0 ? 'red' : idx === 1 ? 'blue' : 'yellow';
                             return (
                               <React.Fragment key={p.id}>
                                 {idx > 0 && (

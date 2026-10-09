@@ -164,7 +164,7 @@ export default function MatchDetailModal({ match, onClose }: MatchDetailModalPro
                         <TeamAvatar
                           logoUrl={p.team?.logoUrl}
                           name={p.team?.name}
-                          cornerColor={isWinner ? 'blue' : idx === 0 ? 'red' : idx === 1 ? 'blue' : 'green'}
+                          cornerColor={isWinner ? 'blue' : idx === 0 ? 'red' : idx === 1 ? 'blue' : 'yellow'}
                           size="sm"
                         />
                         <div>
