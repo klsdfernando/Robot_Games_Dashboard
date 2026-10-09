@@ -250,18 +250,38 @@ export function getTournamentStageSequence(totalTeams: number): StageType[] {
   }
 
   if (totalTeams <= 4) {
+    stages.push('WINNERS_FINAL', 'WILDCARD_FINAL', 'FINAL', 'COMPLETED');
+    return stages;
+  }
+
+  if (totalTeams <= 8) {
     stages.push('SEMIFINAL', 'SEMIFINAL_WILDCARD', 'WINNERS_FINAL', 'WILDCARD_FINAL', 'FINAL', 'COMPLETED');
     return stages;
   }
 
-  // 5 to 16+ teams
+  if (totalTeams <= 16) {
+    stages.push(
+      'QUARTERFINAL',
+      'QUARTERFINAL_WILDCARD',
+      'SEMIFINAL',
+      'SEMIFINAL_WILDCARD',
+      'WINNERS_FINAL',
+      'WILDCARD_FINAL',
+      'FINAL',
+      'COMPLETED'
+    );
+    return stages;
+  }
+
+  // 17 to 32+ teams: includes Round of 16
   stages.push(
+    'ROUND_OF_16',
+    'ROUND_OF_16_WILDCARD',
     'QUARTERFINAL',
     'QUARTERFINAL_WILDCARD',
     'SEMIFINAL',
     'SEMIFINAL_WILDCARD',
     'WINNERS_FINAL',
-    'WILDCARD_SEMIFINAL',
     'WILDCARD_FINAL',
     'FINAL',
     'COMPLETED'

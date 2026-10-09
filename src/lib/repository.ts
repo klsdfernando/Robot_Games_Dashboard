@@ -534,8 +534,62 @@ export function setMatchWinner(
 
             db.prepare("UPDATE teams SET status = 'WILDCARD' WHERE id = ?").run(p.teamId);
 
-            const wcSlots = db.prepare('SELECT team_id FROM match_participants WHERE match_id = ?').all(wcSlot.match_id) as { team_id: string | null }[];
-            if (wcSlots.length >= 2 && wcSlots.every(s => s.team_id !== null)) {
+            const wcSlots = db.prepare('SELECT id, team_id FROM match_participants WHERE match_id = ? ORDER BY participant_order').all(wcSlot.match_id) as { id: string; team_id: string | null }[];
+            if (wcSlots.length === 1 && wcSlots[0].team_id !== null) {
+              const byeTeamId = wcSlots[0].team_id;
+              db.prepare('UPDATE match_participants SET is_winner = 1 WHERE id = ?').run(wcSlots[0].id);
+              db.prepare(`
+                UPDATE matches
+                SET status = 'BYE', winner_team_id = ?, completed_at = ?, updated_at = ?
+                WHERE id = ?
+              `).run(byeTeamId, now, now, wcSlot.match_id);
+
+              let byeSourceMatchId = wcSlot.match_id;
+              const byeVisited = new Set<string>();
+              while (!byeVisited.has(byeSourceMatchId)) {
+                byeVisited.add(byeSourceMatchId);
+                const nextRow = db.prepare('SELECT next_match_id FROM matches WHERE id = ?').get(byeSourceMatchId) as { next_match_id: string | null } | undefined;
+                let nextSlot = db.prepare(`
+                  SELECT id, match_id FROM match_participants
+                  WHERE source_match_id = ? AND (advancement_source = 'WINNER' OR advancement_source IS NULL) AND team_id IS NULL
+                  ORDER BY participant_order ASC
+                  LIMIT 1
+                `).get(byeSourceMatchId) as { id: string; match_id: string } | undefined;
+
+                if (!nextSlot && nextRow?.next_match_id) {
+                  nextSlot = db.prepare(`
+                    SELECT id, match_id FROM match_participants
+                    WHERE match_id = ? AND team_id IS NULL
+                    ORDER BY participant_order ASC
+                    LIMIT 1
+                  `).get(nextRow.next_match_id) as { id: string; match_id: string } | undefined;
+                }
+
+                if (!nextSlot) break;
+                db.prepare(`
+                  UPDATE match_participants
+                  SET team_id = ?, placeholder_text = NULL, advancement_source = 'WINNER'
+                  WHERE id = ?
+                `).run(byeTeamId, nextSlot.id);
+
+                const nextTargetSlots = db.prepare('SELECT id, team_id FROM match_participants WHERE match_id = ? ORDER BY participant_order').all(nextSlot.match_id) as { id: string; team_id: string | null }[];
+                if (nextTargetSlots.length === 1 && nextTargetSlots[0].team_id) {
+                  db.prepare('UPDATE match_participants SET is_winner = 1 WHERE id = ?').run(nextTargetSlots[0].id);
+                  db.prepare(`
+                    UPDATE matches
+                    SET status = 'BYE', winner_team_id = ?, completed_at = ?, updated_at = ?
+                    WHERE id = ?
+                  `).run(byeTeamId, now, now, nextSlot.match_id);
+                  byeSourceMatchId = nextSlot.match_id;
+                  continue;
+                }
+
+                if (nextTargetSlots.length >= 2 && nextTargetSlots.every(s => s.team_id !== null)) {
+                  db.prepare("UPDATE matches SET status = 'SCHEDULED', updated_at = ? WHERE id = ?").run(now, nextSlot.match_id);
+                }
+                break;
+              }
+            } else if (wcSlots.length >= 2 && wcSlots.every(s => s.team_id !== null)) {
               db.prepare("UPDATE matches SET status = 'SCHEDULED', updated_at = ? WHERE id = ?").run(now, wcSlot.match_id);
             }
           }
@@ -1005,552 +1059,363 @@ export function confirmTeamsAndGenerateFullBracket(
       const m1 = createMatch({ stageId: stageFinal, stageType: 'FINAL', matchNumber: 1, roundOrder: 1, status: 'SCHEDULED' });
       addParticipant({ matchId: m1, order: 1, teamId: orderedTeams[0].id });
       addParticipant({ matchId: m1, order: 2, teamId: orderedTeams[1].id });
-    } else if (N === 3) {
-      const sR1 = createStage('ROUND_1', 1, 'Round 1 (2v2)', 'ACTIVE');
-      const sWC = createStage('WILDCARD', 2, 'Wildcard Qualifier', 'PENDING');
-      const sFinal = createStage('FINAL', 3, 'Grand Finals', 'PENDING');
-
-      const finalId = crypto.randomUUID();
-      const wcId = crypto.randomUUID();
-      const r1_1 = crypto.randomUUID();
-      const r1_bye = crypto.randomUUID();
-
-      createMatch({ id: r1_1, stageId: sR1, stageType: 'ROUND_1', matchNumber: 1, roundOrder: 1, status: 'SCHEDULED', nextMatchId: finalId, wildcardMatchId: wcId });
-      addParticipant({ matchId: r1_1, order: 1, teamId: orderedTeams[0].id });
-      addParticipant({ matchId: r1_1, order: 2, teamId: orderedTeams[1].id });
-
-      createMatch({ id: r1_bye, stageId: sR1, stageType: 'ROUND_1', matchNumber: 2, roundOrder: 1, status: 'BYE', winnerTeamId: orderedTeams[2].id, nextMatchId: finalId });
-      addParticipant({ matchId: r1_bye, order: 1, teamId: orderedTeams[2].id, isWinner: true });
-
-      createMatch({ id: wcId, stageId: sWC, stageType: 'WILDCARD', matchNumber: 1, roundOrder: 1, status: 'SCHEDULED', nextMatchId: finalId });
-      addParticipant({ matchId: wcId, order: 1, sourceMatchId: r1_1, advancementSource: 'WILDCARD_DROP' });
-
-      createMatch({ id: finalId, stageId: sFinal, stageType: 'FINAL', matchNumber: 1, roundOrder: 2, status: 'SCHEDULED' });
-      addParticipant({ matchId: finalId, order: 1, teamId: orderedTeams[2].id, advancementSource: 'ROUND_1_BYE' });
-      addParticipant({ matchId: finalId, order: 2, sourceMatchId: r1_1, advancementSource: 'WINNER' });
-    } else if (N === 4) {
-      const sR1 = createStage('ROUND_1', 1, 'Round 1 (Semifinals)', 'ACTIVE');
-      const sWC = createStage('WILDCARD', 2, 'Wildcard Decider', 'PENDING');
-      const sWF = createStage('WINNERS_FINAL', 3, 'Winners Final', 'PENDING');
-      const sFinal = createStage('FINAL', 4, 'Grand Finals', 'PENDING');
-
-      const finalId = crypto.randomUUID();
-      const wfId = crypto.randomUUID();
-      const wcId = crypto.randomUUID();
-      const r1_1 = crypto.randomUUID();
-      const r1_2 = crypto.randomUUID();
-
-      createMatch({ id: r1_1, stageId: sR1, stageType: 'ROUND_1', matchNumber: 1, roundOrder: 1, status: 'SCHEDULED', nextMatchId: wfId, wildcardMatchId: wcId });
-      const t1_1 = (customPairings && customPairings[0]?.team1Id) || orderedTeams[0].id;
-      const t1_2 = (customPairings && customPairings[0]?.team2Id) || orderedTeams[3].id;
-      addParticipant({ matchId: r1_1, order: 1, teamId: t1_1 });
-      addParticipant({ matchId: r1_1, order: 2, teamId: t1_2 });
-
-      createMatch({ id: r1_2, stageId: sR1, stageType: 'ROUND_1', matchNumber: 2, roundOrder: 1, status: 'SCHEDULED', nextMatchId: wfId, wildcardMatchId: wcId });
-      const t2_1 = (customPairings && customPairings[1]?.team1Id) || orderedTeams[1].id;
-      const t2_2 = (customPairings && customPairings[1]?.team2Id) || orderedTeams[2].id;
-      addParticipant({ matchId: r1_2, order: 1, teamId: t2_1 });
-      addParticipant({ matchId: r1_2, order: 2, teamId: t2_2 });
-
-      createMatch({ id: wcId, stageId: sWC, stageType: 'WILDCARD', matchNumber: 1, roundOrder: 1, status: 'SCHEDULED', nextMatchId: finalId });
-      addParticipant({ matchId: wcId, order: 1, sourceMatchId: r1_1, advancementSource: 'WILDCARD_DROP' });
-      addParticipant({ matchId: wcId, order: 2, sourceMatchId: r1_2, advancementSource: 'WILDCARD_DROP' });
-
-      createMatch({ id: wfId, stageId: sWF, stageType: 'WINNERS_FINAL', matchNumber: 1, roundOrder: 2, status: 'SCHEDULED', nextMatchId: finalId });
-      addParticipant({ matchId: wfId, order: 1, sourceMatchId: r1_1, advancementSource: 'WINNER' });
-      addParticipant({ matchId: wfId, order: 2, sourceMatchId: r1_2, advancementSource: 'WINNER' });
-
-      createMatch({ id: finalId, stageId: sFinal, stageType: 'FINAL', matchNumber: 1, roundOrder: 3, status: 'SCHEDULED' });
-      addParticipant({ matchId: finalId, order: 1, sourceMatchId: wfId, advancementSource: 'WINNER' });
-      addParticipant({ matchId: finalId, order: 2, sourceMatchId: wcId, advancementSource: 'WINNER' });
-    } else if (N <= 8) {
-      // 5 to 8 Teams: Target 8-bracket with 3-way prioritized Wildcards
-      const sR1 = createStage('ROUND_1', 1, 'Round 1', 'ACTIVE');
-      const sWC = createStage('WILDCARD', 2, 'Round 1 Wildcard', 'PENDING');
-      const sSF = createStage('SEMIFINAL', 3, 'Semifinals', 'PENDING');
-      const sSWC = createStage('SEMIFINAL_WILDCARD', 4, 'Wildcard Semifinals', 'PENDING');
-      const sWF = createStage('WINNERS_FINAL', 5, 'Winners Final', 'PENDING');
-      const sWCF = createStage('WILDCARD_FINAL', 6, 'Wildcard Final', 'PENDING');
-      const sFinal = createStage('FINAL', 7, 'Grand Finals', 'PENDING');
-
-      const finalId = crypto.randomUUID();
-      const wcfId = crypto.randomUUID();
-      const wfId = crypto.randomUUID();
-      const sf1Id = crypto.randomUUID();
-      const sf2Id = crypto.randomUUID();
-
-      const numByes = 8 - N;
-      const numR1Matches = N - 4;
-      const r1MatchIds: string[] = [];
-
-      const byeTeams = orderedTeams.slice(0, numByes);
-      const r1Teams = orderedTeams.slice(numByes);
-
-      // Create Round 1 Matches
-      for (let i = 0; i < numR1Matches; i++) {
-        const r1Id = crypto.randomUUID();
-        r1MatchIds.push(r1Id);
-
-        createMatch({
-          id: r1Id,
-          stageId: sR1,
-          stageType: 'ROUND_1',
-          matchNumber: i + 1,
-          roundOrder: 1,
-          status: 'SCHEDULED',
-          nextMatchId: i === 0 ? sf1Id : sf2Id
-        });
-
-        const t1 = (customPairings && customPairings[i]?.team1Id) || r1Teams[i * 2]?.id;
-        const t2 = (customPairings && customPairings[i]?.team2Id) || r1Teams[i * 2 + 1]?.id;
-        if (t1) addParticipant({ matchId: r1Id, order: 1, teamId: t1 });
-        if (t2) addParticipant({ matchId: r1Id, order: 2, teamId: t2 });
-      }
-
-      // Round 1 Wildcard Matches (prioritize 3-way, fall back to 2-way)
-      const r1WcMatchIds: string[] = [];
-      const r1LoserCount = numR1Matches;
-      const r1WcGroupSizes = calculateWildcardGroupSizes(r1LoserCount);
-
-      let r1LoserIdx = 0;
-      for (let g = 0; g < r1WcGroupSizes.length; g++) {
-        const size = r1WcGroupSizes[g];
-        const wcMatchId = crypto.randomUUID();
-        r1WcMatchIds.push(wcMatchId);
-
-        createMatch({
-          id: wcMatchId,
-          stageId: sWC,
-          stageType: 'WILDCARD',
-          matchNumber: g + 1,
-          roundOrder: 1,
-          status: 'SCHEDULED'
-        });
-
-        for (let p = 0; p < size; p++) {
-          const srcId = r1MatchIds[r1LoserIdx++];
-          if (srcId) {
-            addParticipant({
-              matchId: wcMatchId,
-              order: p + 1,
-              sourceMatchId: srcId,
-              advancementSource: 'WILDCARD_DROP'
-            });
-            db.prepare("UPDATE matches SET wildcard_match_id = ? WHERE id = ?").run(wcMatchId, srcId);
-          }
-        }
-      }
-
-      // Build Semifinals (Main 1v1)
-      createMatch({ id: sf1Id, stageId: sSF, stageType: 'SEMIFINAL', matchNumber: 1, roundOrder: 2, status: 'SCHEDULED', nextMatchId: wfId });
-      createMatch({ id: sf2Id, stageId: sSF, stageType: 'SEMIFINAL', matchNumber: 2, roundOrder: 2, status: 'SCHEDULED', nextMatchId: wfId });
-
-      let byeIdx = 0;
-      let r1Idx = 0;
-      const sfConfigs = [
-        { matchId: sf1Id, order: 1 },
-        { matchId: sf1Id, order: 2 },
-        { matchId: sf2Id, order: 1 },
-        { matchId: sf2Id, order: 2 }
-      ];
-
-      for (let slot = 0; slot < 4; slot++) {
-        const cfg = sfConfigs[slot];
-        if (byeIdx < numByes) {
-          const t = byeTeams[byeIdx++];
-          addParticipant({ matchId: cfg.matchId, order: cfg.order, teamId: t.id, advancementSource: 'ROUND_1_BYE' });
-        } else if (r1Idx < numR1Matches) {
-          const sourceId = r1MatchIds[r1Idx++];
-          addParticipant({ matchId: cfg.matchId, order: cfg.order, sourceMatchId: sourceId, advancementSource: 'WINNER' });
-        }
-      }
-
-      // Wildcard Semifinals (R1 Wildcard survivors + Semifinal drop-downs, prioritizing 3-way battles)
-      const swcPool: { sourceId: string; source: 'WINNER' | 'WILDCARD_DROP' }[] = [
-        ...r1WcMatchIds.map(id => ({ sourceId: id, source: 'WINNER' as const })),
-        { sourceId: sf1Id, source: 'WILDCARD_DROP' as const },
-        { sourceId: sf2Id, source: 'WILDCARD_DROP' as const }
-      ];
-      const swcGroupSizes = calculateWildcardGroupSizes(swcPool.length);
-      const swcMatchIds: string[] = [];
-
-      let swcPoolIdx = 0;
-      for (let g = 0; g < swcGroupSizes.length; g++) {
-        const size = swcGroupSizes[g];
-        const matchId = crypto.randomUUID();
-        swcMatchIds.push(matchId);
-
-        createMatch({
-          id: matchId,
-          stageId: sSWC,
-          stageType: 'SEMIFINAL_WILDCARD',
-          matchNumber: g + 1,
-          roundOrder: 3,
-          status: 'SCHEDULED',
-          nextMatchId: wcfId
-        });
-
-        for (let p = 0; p < size; p++) {
-          const item = swcPool[swcPoolIdx++];
-          if (item) {
-            addParticipant({
-              matchId,
-              order: p + 1,
-              sourceMatchId: item.sourceId,
-              advancementSource: item.source
-            });
-            if (item.source === 'WINNER') {
-              db.prepare("UPDATE matches SET next_match_id = ? WHERE id = ?").run(matchId, item.sourceId);
-            } else {
-              db.prepare("UPDATE matches SET wildcard_match_id = ? WHERE id = ?").run(matchId, item.sourceId);
-            }
-          }
-        }
-      }
-
-      // Winners Final (Winner SF1 vs Winner SF2)
-      createMatch({ id: wfId, stageId: sWF, stageType: 'WINNERS_FINAL', matchNumber: 1, roundOrder: 4, status: 'SCHEDULED', nextMatchId: finalId, wildcardMatchId: wcfId });
-      addParticipant({ matchId: wfId, order: 1, sourceMatchId: sf1Id, advancementSource: 'WINNER' });
-      addParticipant({ matchId: wfId, order: 2, sourceMatchId: sf2Id, advancementSource: 'WINNER' });
-
-      // Wildcard Final (Winner(s) of Semifinal Wildcard vs Loser of Winners Final)
-      const wcfContenders: { sourceId: string; source: 'WINNER' | 'WILDCARD_DROP' }[] = [
-        ...swcMatchIds.map(id => ({ sourceId: id, source: 'WINNER' as const })),
-        { sourceId: wfId, source: 'WILDCARD_DROP' as const }
-      ];
-
-      createMatch({
-        id: wcfId,
-        stageId: sWCF,
-        stageType: 'WILDCARD_FINAL',
-        matchNumber: 1,
-        roundOrder: 5,
-        status: 'SCHEDULED',
-        nextMatchId: finalId
-      });
-
-      wcfContenders.forEach((item, idx) => {
-        addParticipant({
-          matchId: wcfId,
-          order: idx + 1,
-          sourceMatchId: item.sourceId,
-          advancementSource: item.source
-        });
-        if (item.source === 'WINNER') {
-          db.prepare("UPDATE matches SET next_match_id = ? WHERE id = ?").run(wcfId, item.sourceId);
-        } else {
-          db.prepare("UPDATE matches SET wildcard_match_id = ? WHERE id = ?").run(wcfId, item.sourceId);
-        }
-      });
-
-      // Grand Finals (Winner WF vs Winner WCF)
-      createMatch({ id: finalId, stageId: sFinal, stageType: 'FINAL', matchNumber: 1, roundOrder: 6, status: 'SCHEDULED' });
-      addParticipant({ matchId: finalId, order: 1, sourceMatchId: wfId, advancementSource: 'WINNER' });
-      addParticipant({ matchId: finalId, order: 2, sourceMatchId: wcfId, advancementSource: 'WINNER' });
     } else {
-      // 9+ teams: Dual-Track Championship Bracket with 3-way prioritized Wildcards
-      const sR1 = createStage('ROUND_1', 1, 'Round 1', 'ACTIVE');
-      const sWC = createStage('WILDCARD', 2, 'Round 1 Wildcard', 'PENDING');
-      const sQF = createStage('QUARTERFINAL', 3, 'Quarterfinals', 'PENDING');
-      const sQFWC = createStage('QUARTERFINAL_WILDCARD', 4, 'Quarterfinals Wildcard', 'PENDING');
-      const sSF = createStage('SEMIFINAL', 5, 'Semifinals', 'PENDING');
-      const sSWC = createStage('SEMIFINAL_WILDCARD', 6, 'Wildcard Semifinals', 'PENDING');
-      const sWF = createStage('WINNERS_FINAL', 7, 'Winners Final', 'PENDING');
-      const sWCF = createStage('WILDCARD_FINAL', 8, 'Wildcard Final', 'PENDING');
-      const sFinal = createStage('FINAL', 9, 'Grand Finals', 'PENDING');
-
-      const finalId = crypto.randomUUID();
-      const wcfId = crypto.randomUUID();
-      const wfId = crypto.randomUUID();
-      const sf1Id = crypto.randomUUID();
-      const sf2Id = crypto.randomUUID();
-      const numByes = N % 2;
-      const numR1Matches = Math.floor(N / 2);
-      const r1AdvancerCount = numR1Matches + numByes;
-      const qfMatchCount = Math.ceil(r1AdvancerCount / 2);
-      const qfContestedCount = Math.floor(r1AdvancerCount / 2);
-      const qfIds = Array.from({ length: qfMatchCount }, () => crypto.randomUUID());
-      const r1MatchIds: string[] = [];
-      const byeMatchIds: string[] = [];
-
-      const byeTeams = numByes ? orderedTeams.slice(0, 1) : [];
-      const r1Teams = orderedTeams.slice(numByes);
-
-      // Create Round 1 Matches
-      for (let i = 0; i < numR1Matches; i++) {
-        const r1Id = crypto.randomUUID();
-        r1MatchIds.push(r1Id);
-
-        createMatch({
-          id: r1Id,
-          stageId: sR1,
-          stageType: 'ROUND_1',
-          matchNumber: i + 1,
-          roundOrder: 1,
-          status: 'SCHEDULED',
-          nextMatchId: qfIds[Math.floor((numByes + i) / 2)]
-        });
-
-        const t1 = (customPairings && customPairings[i]?.team1Id) || r1Teams[i * 2]?.id;
-        const t2 = (customPairings && customPairings[i]?.team2Id) || r1Teams[i * 2 + 1]?.id;
-        if (t1) addParticipant({ matchId: r1Id, order: 1, teamId: t1 });
-        if (t2) addParticipant({ matchId: r1Id, order: 2, teamId: t2 });
+      // Dynamic Multi-Tier Double-Elimination / Wildcard Tournament Architecture
+      // Automatically handles any team count (odd team BYEs, 3v3 and 2v2 wildcards, drop-downs, championship)
+      interface RoundPlan {
+        roundIndex: number;
+        stageType: StageType;
+        stageDisplayName: string;
+        teamsIn: number;
+        hasBye: boolean;
+        contestedMatches: number;
+        losersCount: number;
+        advancersCount: number;
       }
 
-      // Top seed BYE if roster is odd
-      for (let i = 0; i < byeTeams.length; i++) {
-        const byeId = crypto.randomUUID();
-        const team = byeTeams[i];
-        byeMatchIds.push(byeId);
+      const mainPlans: RoundPlan[] = [];
+      let currTeams = N;
+      let rIdx = 0;
 
-        createMatch({
-          id: byeId,
-          stageId: sR1,
-          stageType: 'ROUND_1',
-          matchNumber: numR1Matches + i + 1,
-          roundOrder: 1,
-          status: 'BYE',
-          winnerTeamId: team.id,
-          nextMatchId: qfIds[Math.floor(i / 2)]
+      while (currTeams > 2) {
+        const hasBye = currTeams % 2 === 1;
+        const contestedMatches = Math.floor(currTeams / 2);
+        const losersCount = contestedMatches;
+        const advancersCount = contestedMatches + (hasBye ? 1 : 0);
+
+        mainPlans.push({
+          roundIndex: rIdx++,
+          stageType: '' as StageType,
+          stageDisplayName: '',
+          teamsIn: currTeams,
+          hasBye,
+          contestedMatches,
+          losersCount,
+          advancersCount
         });
-        addParticipant({
-          matchId: byeId,
-          order: 1,
-          teamId: team.id,
-          isWinner: true,
-          advancementSource: 'ROUND_1_BYE'
-        });
+
+        currTeams = advancersCount;
       }
 
-      // 1. Round 1 Wildcard (prioritize 3-team battles)
-      // e.g. 8 lost teams -> [3, 3, 2] (two 3-team battles, one 2-team battle)
-      // e.g. 9 lost teams -> [3, 3, 3] (three 3-team battles)
-      // e.g. 10 lost teams -> [3, 3, 2, 2] (two 3-team battles, two 2-team battles)
-      const r1WcMatchIds: string[] = [];
-      const r1LoserCount = numR1Matches;
-      const r1WcGroupSizes = calculateWildcardGroupSizes(r1LoserCount);
+      mainPlans.push({
+        roundIndex: rIdx++,
+        stageType: 'WINNERS_FINAL',
+        stageDisplayName: 'Winners Final',
+        teamsIn: 2,
+        hasBye: false,
+        contestedMatches: 1,
+        losersCount: 1,
+        advancersCount: 1
+      });
 
-      let r1LoserIndex = 0;
-      for (let g = 0; g < r1WcGroupSizes.length; g++) {
-        const size = r1WcGroupSizes[g];
-        const wcMatchId = crypto.randomUUID();
-        r1WcMatchIds.push(wcMatchId);
+      const totalMainRounds = mainPlans.length;
 
-        createMatch({
-          id: wcMatchId,
-          stageId: sWC,
-          stageType: 'WILDCARD',
-          matchNumber: g + 1,
-          roundOrder: 2,
-          status: 'SCHEDULED'
-        });
-
-        for (let p = 0; p < size; p++) {
-          const srcId = r1MatchIds[r1LoserIndex++];
-          if (srcId) {
-            addParticipant({
-              matchId: wcMatchId,
-              order: p + 1,
-              sourceMatchId: srcId,
-              advancementSource: 'WILDCARD_DROP'
-            });
-            db.prepare("UPDATE matches SET wildcard_match_id = ? WHERE id = ?").run(wcMatchId, srcId);
+      mainPlans.forEach((p, idx) => {
+        if (idx === 0) {
+          p.stageType = 'ROUND_1';
+          p.stageDisplayName = 'Round 1';
+        } else if (idx === totalMainRounds - 1) {
+          p.stageType = 'WINNERS_FINAL';
+          p.stageDisplayName = 'Winners Final';
+        } else {
+          const distFromEnd = totalMainRounds - 1 - idx;
+          if (distFromEnd === 1) {
+            p.stageType = 'SEMIFINAL';
+            p.stageDisplayName = 'Semifinals';
+          } else if (distFromEnd === 2) {
+            p.stageType = 'QUARTERFINAL';
+            p.stageDisplayName = 'Quarterfinals';
+          } else if (distFromEnd === 3) {
+            p.stageType = 'ROUND_OF_16';
+            p.stageDisplayName = 'Round of 16';
+          } else {
+            p.stageType = `ROUND_${idx + 1}` as StageType;
+            p.stageDisplayName = `Round ${idx + 1}`;
           }
+        }
+      });
+
+      const wcStageTypes: { stageType: StageType; displayName: string }[] = [];
+      for (let idx = 0; idx < totalMainRounds - 1; idx++) {
+        const mainSt = mainPlans[idx].stageType;
+        if (mainSt === 'ROUND_1') {
+          wcStageTypes.push({ stageType: 'WILDCARD', displayName: 'Round 1 Wildcard' });
+        } else if (mainSt === 'ROUND_OF_16') {
+          wcStageTypes.push({ stageType: 'ROUND_OF_16_WILDCARD', displayName: 'Round of 16 Wildcard' });
+        } else if (mainSt === 'QUARTERFINAL') {
+          wcStageTypes.push({ stageType: 'QUARTERFINAL_WILDCARD', displayName: 'Quarterfinals Wildcard' });
+        } else if (mainSt === 'SEMIFINAL') {
+          wcStageTypes.push({ stageType: 'SEMIFINAL_WILDCARD', displayName: 'Wildcard Semifinals' });
+        } else {
+          wcStageTypes.push({ stageType: `${mainSt}_WILDCARD` as StageType, displayName: `${mainPlans[idx].stageDisplayName} Wildcard` });
         }
       }
 
-      // 2. Quarterfinals (Main 1v1)
-      for (let q = 0; q < qfIds.length; q++) {
-        const targetSF = q < 2 ? sf1Id : sf2Id;
-        const isRoundBye = q === qfIds.length - 1 && r1AdvancerCount % 2 === 1;
-        createMatch({
-          id: qfIds[q],
-          stageId: sQF,
-          stageType: 'QUARTERFINAL',
-          matchNumber: q + 1,
-          roundOrder: 3,
-          status: isRoundBye ? 'BYE' : 'SCHEDULED',
-          nextMatchId: targetSF
-        });
+      let stageOrder = 1;
+      const stageMap = new Map<StageType, string>();
+
+      for (let i = 0; i < totalMainRounds; i++) {
+        const mPlan = mainPlans[i];
+        const mStageId = createStage(mPlan.stageType, stageOrder++, mPlan.stageDisplayName, i === 0 ? 'ACTIVE' : 'PENDING');
+        stageMap.set(mPlan.stageType, mStageId);
+
+        if (i < totalMainRounds - 1) {
+          const wcInfo = wcStageTypes[i];
+          const wcStageId = createStage(wcInfo.stageType, stageOrder++, wcInfo.displayName, 'PENDING');
+          stageMap.set(wcInfo.stageType, wcStageId);
+        }
       }
 
-      const qfSlots = Array.from({ length: r1AdvancerCount }, (_, index) => ({
-        matchId: qfIds[Math.floor(index / 2)],
-        order: (index % 2) + 1
-      }));
+      const wcfStageId = createStage('WILDCARD_FINAL', stageOrder++, 'Wildcard Final', 'PENDING');
+      stageMap.set('WILDCARD_FINAL', wcfStageId);
 
-      for (let s = 0; s < qfSlots.length; s++) {
-        const cfg = qfSlots[s];
-        if (s < numByes) {
-          const team = byeTeams[s];
-          addParticipant({
-            matchId: cfg.matchId,
-            order: cfg.order,
-            teamId: team.id,
-            sourceMatchId: byeMatchIds[s],
-            advancementSource: 'WINNER'
+      const finalStageId = createStage('FINAL', stageOrder++, 'Grand Finals', 'PENDING');
+      stageMap.set('FINAL', finalStageId);
+
+      const mainRoundMatches: { matchId: string; isBye: boolean }[][] = [];
+      const wcRoundMatches: string[][] = [];
+
+      // Determine Round 1 BYE team if roster is odd
+      let r1ByeTeam: Team | null = null;
+      let r1ContestedTeams: Team[] = [];
+
+      if (mainPlans[0].hasBye) {
+        if (customPairings && customPairings.length > 0) {
+          const pairedIds = new Set<string>();
+          customPairings.forEach(p => {
+            pairedIds.add(p.team1Id);
+            pairedIds.add(p.team2Id);
           });
+          r1ByeTeam = orderedTeams.find(t => !pairedIds.has(t.id)) || orderedTeams[0];
+          r1ContestedTeams = orderedTeams.filter(t => t.id !== r1ByeTeam!.id);
         } else {
-          const srcId = r1MatchIds[s - numByes];
+          r1ByeTeam = orderedTeams[0];
+          r1ContestedTeams = orderedTeams.slice(1);
+        }
+      } else {
+        r1ContestedTeams = [...orderedTeams];
+      }
+
+      for (let r = 0; r < totalMainRounds; r++) {
+        const plan = mainPlans[r];
+        const sId = stageMap.get(plan.stageType)!;
+        const rMatches: { matchId: string; isBye: boolean }[] = [];
+
+        for (let m = 0; m < plan.contestedMatches; m++) {
+          const matchId = crypto.randomUUID();
+          createMatch({
+            id: matchId,
+            stageId: sId,
+            stageType: plan.stageType,
+            matchNumber: m + 1,
+            roundOrder: r + 1,
+            status: 'SCHEDULED'
+          });
+          rMatches.push({ matchId, isBye: false });
+
+          if (r === 0) {
+            let t1Id: string | undefined;
+            let t2Id: string | undefined;
+
+            if (customPairings && customPairings[m]) {
+              t1Id = customPairings[m].team1Id;
+              t2Id = customPairings[m].team2Id;
+            } else {
+              t1Id = r1ContestedTeams[m * 2]?.id;
+              t2Id = r1ContestedTeams[m * 2 + 1]?.id;
+            }
+
+            if (t1Id) addParticipant({ matchId, order: 1, teamId: t1Id });
+            if (t2Id) addParticipant({ matchId, order: 2, teamId: t2Id });
+          }
+        }
+
+        if (plan.hasBye) {
+          const byeMatchId = crypto.randomUUID();
+          const isR1 = r === 0;
+          const byeTeam = isR1 ? r1ByeTeam : null;
+
+          createMatch({
+            id: byeMatchId,
+            stageId: sId,
+            stageType: plan.stageType,
+            matchNumber: plan.contestedMatches + 1,
+            roundOrder: r + 1,
+            status: 'BYE',
+            winnerTeamId: byeTeam?.id || null
+          });
+          rMatches.push({ matchId: byeMatchId, isBye: true });
+
+          if (isR1 && byeTeam) {
+            addParticipant({
+              matchId: byeMatchId,
+              order: 1,
+              teamId: byeTeam.id,
+              isWinner: true,
+              advancementSource: 'ROUND_1_BYE'
+            });
+          }
+        }
+
+        mainRoundMatches.push(rMatches);
+      }
+
+      // Wire Main rounds forward (Round r -> Round r + 1)
+      for (let r = 0; r < totalMainRounds - 1; r++) {
+        const currMatches = mainRoundMatches[r];
+        const nextMatches = mainRoundMatches[r + 1];
+
+        const advancersFromCurr: string[] = [];
+        const byeMatch = currMatches.find(m => m.isBye);
+        if (byeMatch) advancersFromCurr.push(byeMatch.matchId);
+        currMatches.filter(m => !m.isBye).forEach(m => advancersFromCurr.push(m.matchId));
+
+        const nextByeMatch = nextMatches.find(m => m.isBye);
+        let advIdx = 0;
+
+        if (nextByeMatch) {
+          const srcId = advancersFromCurr[advIdx++];
           addParticipant({
-            matchId: cfg.matchId,
-            order: cfg.order,
+            matchId: nextByeMatch.matchId,
+            order: 1,
             sourceMatchId: srcId,
             advancementSource: 'WINNER'
           });
+          db.prepare('UPDATE matches SET next_match_id = ? WHERE id = ?').run(nextByeMatch.matchId, srcId);
         }
-      }
 
-      // 3. Quarterfinals Wildcard (R1 Wildcard winners vs Quarterfinals losers, prioritizing 3-way battles)
-      const qfWcWinners = r1WcMatchIds.map(id => ({ sourceId: id, source: 'WINNER' as const }));
-      const qfLosers = qfIds.slice(0, qfContestedCount).map(id => ({ sourceId: id, source: 'WILDCARD_DROP' as const }));
-      const qfWcPool: { sourceId: string; source: 'WINNER' | 'WILDCARD_DROP' }[] = [];
-
-      let qwIdx = 0, qlIdx = 0;
-      while (qwIdx < qfWcWinners.length || qlIdx < qfLosers.length) {
-        if (qwIdx < qfWcWinners.length) qfWcPool.push(qfWcWinners[qwIdx++]);
-        if (qlIdx < qfLosers.length) qfWcPool.push(qfLosers[qlIdx++]);
-      }
-
-      const qfWcGroupSizes = calculateWildcardGroupSizes(qfWcPool.length);
-      const qfWcMatchIds: string[] = [];
-      let qfPoolIdx = 0;
-
-      for (let g = 0; g < qfWcGroupSizes.length; g++) {
-        const size = qfWcGroupSizes[g];
-        const matchId = crypto.randomUUID();
-        qfWcMatchIds.push(matchId);
-
-        createMatch({
-          id: matchId,
-          stageId: sQFWC,
-          stageType: 'QUARTERFINAL_WILDCARD',
-          matchNumber: g + 1,
-          roundOrder: 4,
-          status: 'SCHEDULED'
+        nextMatches.filter(m => !m.isBye).forEach(m => {
+          for (let order = 1; order <= 2; order++) {
+            const srcId = advancersFromCurr[advIdx++];
+            if (srcId) {
+              const isR1ByeSource = r === 0 && r1ByeTeam && byeMatch && srcId === byeMatch.matchId;
+              addParticipant({
+                matchId: m.matchId,
+                order,
+                sourceMatchId: srcId,
+                teamId: (isR1ByeSource && r1ByeTeam) ? r1ByeTeam.id : null,
+                advancementSource: isR1ByeSource ? 'ROUND_1_BYE' : 'WINNER'
+              });
+              db.prepare('UPDATE matches SET next_match_id = ? WHERE id = ?').run(m.matchId, srcId);
+            }
+          }
         });
+      }
 
-        for (let p = 0; p < size; p++) {
-          const item = qfWcPool[qfPoolIdx++];
-          if (item) {
-            addParticipant({
-              matchId,
-              order: p + 1,
-              sourceMatchId: item.sourceId,
-              advancementSource: item.source
-            });
-            if (item.source === 'WINNER') {
-              db.prepare("UPDATE matches SET next_match_id = ? WHERE id = ?").run(matchId, item.sourceId);
-            } else {
-              db.prepare("UPDATE matches SET wildcard_match_id = ? WHERE id = ?").run(matchId, item.sourceId);
+      // Wire Wildcard rounds (prioritize 3-player battles, e.g. [3, 2] for 5, [2, 2] for 4)
+      let prevWcMatchIds: string[] = [];
+
+      for (let r = 0; r < totalMainRounds - 1; r++) {
+        const mainContestedMatches = mainRoundMatches[r].filter(m => !m.isBye).map(m => m.matchId);
+        const wcStageType = wcStageTypes[r].stageType;
+        const sId = stageMap.get(wcStageType)!;
+
+        const wcPool: { sourceId: string; source: 'WINNER' | 'WILDCARD_DROP' }[] = [
+          ...prevWcMatchIds.map(id => ({ sourceId: id, source: 'WINNER' as const })),
+          ...mainContestedMatches.map(id => ({ sourceId: id, source: 'WILDCARD_DROP' as const }))
+        ];
+
+        const groupSizes = calculateWildcardGroupSizes(wcPool.length);
+        const currentWcMatchIds: string[] = [];
+        let poolIdx = 0;
+
+        for (let g = 0; g < groupSizes.length; g++) {
+          const size = groupSizes[g];
+          const wcMatchId = crypto.randomUUID();
+          currentWcMatchIds.push(wcMatchId);
+
+          createMatch({
+            id: wcMatchId,
+            stageId: sId,
+            stageType: wcStageType,
+            matchNumber: g + 1,
+            roundOrder: r + 1,
+            status: size === 1 ? 'BYE' : 'SCHEDULED'
+          });
+
+          for (let order = 1; order <= size; order++) {
+            const item = wcPool[poolIdx++];
+            if (item) {
+              addParticipant({
+                matchId: wcMatchId,
+                order,
+                sourceMatchId: item.sourceId,
+                advancementSource: item.source
+              });
+              if (item.source === 'WINNER') {
+                db.prepare('UPDATE matches SET next_match_id = ? WHERE id = ?').run(wcMatchId, item.sourceId);
+              } else {
+                db.prepare('UPDATE matches SET wildcard_match_id = ? WHERE id = ?').run(wcMatchId, item.sourceId);
+              }
             }
           }
         }
+
+        wcRoundMatches.push(currentWcMatchIds);
+        prevWcMatchIds = currentWcMatchIds;
       }
 
-      // 4. Semifinals (Main 1v1)
-      createMatch({ id: sf1Id, stageId: sSF, stageType: 'SEMIFINAL', matchNumber: 1, roundOrder: 5, status: 'SCHEDULED', nextMatchId: wfId });
-      addParticipant({ matchId: sf1Id, order: 1, sourceMatchId: qfIds[0], advancementSource: 'WINNER' });
-      addParticipant({ matchId: sf1Id, order: 2, sourceMatchId: qfIds[1], advancementSource: 'WINNER' });
-
-      const sf2IsBye = qfIds.length === 3;
-      createMatch({ id: sf2Id, stageId: sSF, stageType: 'SEMIFINAL', matchNumber: 2, roundOrder: 5, status: sf2IsBye ? 'BYE' : 'SCHEDULED', nextMatchId: wfId });
-      addParticipant({ matchId: sf2Id, order: 1, sourceMatchId: qfIds[2], advancementSource: 'WINNER' });
-      if (qfIds[3]) {
-        addParticipant({ matchId: sf2Id, order: 2, sourceMatchId: qfIds[3], advancementSource: 'WINNER' });
-      }
-
-      // 5. Semifinals Wildcard (QF Wildcard winners vs Semifinals losers, prioritizing 3-way battles)
-      const swcWinners = qfWcMatchIds.map(id => ({ sourceId: id, source: 'WINNER' as const }));
-      const swcLosers = [
-        { sourceId: sf1Id, source: 'WILDCARD_DROP' as const },
-        ...(!sf2IsBye && qfIds[3] ? [{ sourceId: sf2Id, source: 'WILDCARD_DROP' as const }] : [])
+      // Wire Wildcard Final (Survivors of penultimate Wildcard round vs Loser of Winners Final)
+      const winnersFinalMatchId = mainRoundMatches[totalMainRounds - 1][0].matchId;
+      const wcFinalContenders: { sourceId: string; source: 'WINNER' | 'WILDCARD_DROP' }[] = [
+        ...prevWcMatchIds.map(id => ({ sourceId: id, source: 'WINNER' as const })),
+        { sourceId: winnersFinalMatchId, source: 'WILDCARD_DROP' as const }
       ];
-      const swcPool: { sourceId: string; source: 'WINNER' | 'WILDCARD_DROP' }[] = [];
 
-      let swIdx = 0, slIdx = 0;
-      while (swIdx < swcWinners.length || slIdx < swcLosers.length) {
-        if (swIdx < swcWinners.length) swcPool.push(swcWinners[swIdx++]);
-        if (slIdx < swcLosers.length) swcPool.push(swcLosers[slIdx++]);
-      }
-
-      const swcGroupSizes = calculateWildcardGroupSizes(swcPool.length);
-      const swcMatchIds: string[] = [];
-      let swcPoolIdx = 0;
-
-      for (let g = 0; g < swcGroupSizes.length; g++) {
-        const size = swcGroupSizes[g];
-        const matchId = crypto.randomUUID();
-        swcMatchIds.push(matchId);
-
-        createMatch({
-          id: matchId,
-          stageId: sSWC,
-          stageType: 'SEMIFINAL_WILDCARD',
-          matchNumber: g + 1,
-          roundOrder: 6,
-          status: 'SCHEDULED',
-          nextMatchId: wcfId
-        });
-
-        for (let p = 0; p < size; p++) {
-          const item = swcPool[swcPoolIdx++];
-          if (item) {
-            addParticipant({
-              matchId,
-              order: p + 1,
-              sourceMatchId: item.sourceId,
-              advancementSource: item.source
-            });
-            if (item.source === 'WINNER') {
-              db.prepare("UPDATE matches SET next_match_id = ? WHERE id = ?").run(matchId, item.sourceId);
-            } else {
-              db.prepare("UPDATE matches SET wildcard_match_id = ? WHERE id = ?").run(matchId, item.sourceId);
-            }
-          }
-        }
-      }
-
-      // 6. Winners Final (Main 1v1)
-      createMatch({ id: wfId, stageId: sWF, stageType: 'WINNERS_FINAL', matchNumber: 1, roundOrder: 7, status: 'SCHEDULED', nextMatchId: finalId, wildcardMatchId: wcfId });
-      addParticipant({ matchId: wfId, order: 1, sourceMatchId: sf1Id, advancementSource: 'WINNER' });
-      addParticipant({ matchId: wfId, order: 2, sourceMatchId: sf2Id, advancementSource: 'WINNER' });
-
-      // 7. Wildcard Final (Winner(s) of Semifinal Wildcard vs Loser of Winners Final)
-      // Crowns the single Wildcard Champion in a 2-way or 3-way title showdown!
-      const wcfContenders: { sourceId: string; source: 'WINNER' | 'WILDCARD_DROP' }[] = [
-        ...swcMatchIds.map(id => ({ sourceId: id, source: 'WINNER' as const })),
-        { sourceId: wfId, source: 'WILDCARD_DROP' as const }
-      ];
+      const wcFinalMatchId = crypto.randomUUID();
+      const wcFinalStageId = stageMap.get('WILDCARD_FINAL')!;
 
       createMatch({
-        id: wcfId,
-        stageId: sWCF,
+        id: wcFinalMatchId,
+        stageId: wcFinalStageId,
         stageType: 'WILDCARD_FINAL',
         matchNumber: 1,
-        roundOrder: 8,
-        status: 'SCHEDULED',
-        nextMatchId: finalId
+        roundOrder: totalMainRounds,
+        status: wcFinalContenders.length === 1 ? 'BYE' : 'SCHEDULED'
       });
 
-      wcfContenders.forEach((item, idx) => {
+      wcFinalContenders.forEach((item, idx) => {
         addParticipant({
-          matchId: wcfId,
+          matchId: wcFinalMatchId,
           order: idx + 1,
           sourceMatchId: item.sourceId,
           advancementSource: item.source
         });
         if (item.source === 'WINNER') {
-          db.prepare("UPDATE matches SET next_match_id = ? WHERE id = ?").run(wcfId, item.sourceId);
+          db.prepare('UPDATE matches SET next_match_id = ? WHERE id = ?').run(wcFinalMatchId, item.sourceId);
         } else {
-          db.prepare("UPDATE matches SET wildcard_match_id = ? WHERE id = ?").run(wcfId, item.sourceId);
+          db.prepare('UPDATE matches SET wildcard_match_id = ? WHERE id = ?').run(wcFinalMatchId, item.sourceId);
         }
       });
 
-      // 8. Grand Finals (Apex Championship - Winner WF vs Winner WCF)
-      createMatch({ id: finalId, stageId: sFinal, stageType: 'FINAL', matchNumber: 1, roundOrder: 9, status: 'SCHEDULED' });
-      addParticipant({ matchId: finalId, order: 1, sourceMatchId: wfId, advancementSource: 'WINNER' });
-      addParticipant({ matchId: finalId, order: 2, sourceMatchId: wcfId, advancementSource: 'WINNER' });
+      // Wire Grand Finals (Winner of Winners Final vs Winner of Wildcard Final)
+      const grandFinalMatchId = crypto.randomUUID();
+      const targetFinalStageId = stageMap.get('FINAL')!;
+
+      createMatch({
+        id: grandFinalMatchId,
+        stageId: targetFinalStageId,
+        stageType: 'FINAL',
+        matchNumber: 1,
+        roundOrder: totalMainRounds + 1,
+        status: 'SCHEDULED'
+      });
+
+      addParticipant({
+        matchId: grandFinalMatchId,
+        order: 1,
+        sourceMatchId: winnersFinalMatchId,
+        advancementSource: 'WINNER'
+      });
+      db.prepare('UPDATE matches SET next_match_id = ? WHERE id = ?').run(grandFinalMatchId, winnersFinalMatchId);
+
+      addParticipant({
+        matchId: grandFinalMatchId,
+        order: 2,
+        sourceMatchId: wcFinalMatchId,
+        advancementSource: 'WINNER'
+      });
+      db.prepare('UPDATE matches SET next_match_id = ? WHERE id = ?').run(grandFinalMatchId, wcFinalMatchId);
     }
   });
 

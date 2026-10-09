@@ -106,6 +106,8 @@ export default function TournamentTreeGraph({
     const stageSequence = [
       'ROUND_1',
       'WILDCARD',
+      'ROUND_OF_16',
+      'ROUND_OF_16_WILDCARD',
       'QUARTERFINAL',
       'QUARTERFINAL_WILDCARD',
       'SEMIFINAL',
@@ -127,7 +129,7 @@ export default function TournamentTreeGraph({
       const isCompleted = stageMatches.every(m => m.status === 'COMPLETED' || m.status === 'BYE');
       const isActive = !isCompleted;
 
-      let title = 'STAGE';
+      let title = dbStage?.displayName?.toUpperCase() || 'STAGE';
       let subtitle = '';
 
       if (st === 'ROUND_1') {
@@ -135,6 +137,12 @@ export default function TournamentTreeGraph({
         subtitle = 'Winners advance · losers enter Wildcard';
       } else if (st === 'WILDCARD') {
         title = 'WILDCARD ROUND 1';
+        subtitle = 'One winner advances · others are eliminated';
+      } else if (st === 'ROUND_OF_16') {
+        title = 'ROUND OF 16';
+        subtitle = 'Winners advance · losers enter Wildcard';
+      } else if (st === 'ROUND_OF_16_WILDCARD') {
+        title = 'WILDCARD ROUND OF 16';
         subtitle = 'One winner advances · others are eliminated';
       } else if (st === 'QUARTERFINAL') {
         title = 'QUARTERFINALS';
