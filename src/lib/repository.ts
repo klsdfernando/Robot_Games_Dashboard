@@ -1260,46 +1260,50 @@ export function confirmTeamsAndGenerateFullBracket(
         mainRoundMatches.push(rMatches);
       }
 
-      // Wire Main rounds forward (Round r -> Round r + 1)
+      // Wire Main rounds forward (Round r -> Round r + 1) in natural stream order (top to bottom)
       for (let r = 0; r < totalMainRounds - 1; r++) {
         const currMatches = mainRoundMatches[r];
         const nextMatches = mainRoundMatches[r + 1];
 
-        const advancersFromCurr: string[] = [];
-        const byeMatch = currMatches.find(m => m.isBye);
-        if (byeMatch) advancersFromCurr.push(byeMatch.matchId);
-        currMatches.filter(m => !m.isBye).forEach(m => advancersFromCurr.push(m.matchId));
+        // currMatches is already in top-to-bottom visual order: [contested 1..C, bye if any]
+        const advancersFromCurr = [...currMatches];
 
-        const nextByeMatch = nextMatches.find(m => m.isBye);
+        const nextContested = nextMatches.filter(m => !m.isBye);
+        const nextBye = nextMatches.find(m => m.isBye);
+
         let advIdx = 0;
 
-        if (nextByeMatch) {
-          const srcId = advancersFromCurr[advIdx++];
-          addParticipant({
-            matchId: nextByeMatch.matchId,
-            order: 1,
-            sourceMatchId: srcId,
-            advancementSource: 'WINNER'
-          });
-          db.prepare('UPDATE matches SET next_match_id = ? WHERE id = ?').run(nextByeMatch.matchId, srcId);
-        }
-
-        nextMatches.filter(m => !m.isBye).forEach(m => {
+        // 1. Contested matches in next round take adjacent feeder pairs from top to bottom
+        nextContested.forEach(m => {
           for (let order = 1; order <= 2; order++) {
-            const srcId = advancersFromCurr[advIdx++];
-            if (srcId) {
-              const isR1ByeSource = r === 0 && r1ByeTeam && byeMatch && srcId === byeMatch.matchId;
+            if (advIdx < advancersFromCurr.length) {
+              const src = advancersFromCurr[advIdx++];
+              const isR1ByeSource = r === 0 && r1ByeTeam && src.isBye;
               addParticipant({
                 matchId: m.matchId,
                 order,
-                sourceMatchId: srcId,
+                sourceMatchId: src.matchId,
                 teamId: (isR1ByeSource && r1ByeTeam) ? r1ByeTeam.id : null,
                 advancementSource: isR1ByeSource ? 'ROUND_1_BYE' : 'WINNER'
               });
-              db.prepare('UPDATE matches SET next_match_id = ? WHERE id = ?').run(m.matchId, srcId);
+              db.prepare('UPDATE matches SET next_match_id = ? WHERE id = ?').run(m.matchId, src.matchId);
             }
           }
         });
+
+        // 2. BYE match in next round (at the bottom) takes the bottom feeder straight across
+        if (nextBye && advIdx < advancersFromCurr.length) {
+          const src = advancersFromCurr[advIdx++];
+          const isR1ByeSource = r === 0 && r1ByeTeam && src.isBye;
+          addParticipant({
+            matchId: nextBye.matchId,
+            order: 1,
+            sourceMatchId: src.matchId,
+            teamId: (isR1ByeSource && r1ByeTeam) ? r1ByeTeam.id : null,
+            advancementSource: isR1ByeSource ? 'ROUND_1_BYE' : 'WINNER'
+          });
+          db.prepare('UPDATE matches SET next_match_id = ? WHERE id = ?').run(nextBye.matchId, src.matchId);
+        }
       }
 
       // Wire Wildcard rounds (prioritize 3-player battles, e.g. [3, 2] for 5, [2, 2] for 4)

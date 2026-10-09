@@ -911,7 +911,7 @@ function TreeConnector({
       {/* Connector lines container */}
       <div className="flex-1 relative w-full">
         <svg
-          className="w-full h-full absolute inset-0"
+          className="w-full h-full absolute inset-0 drop-shadow-[0_0_8px_rgba(59,130,246,0.35)]"
           viewBox="0 0 48 100"
           preserveAspectRatio="none"
           fill="none"
@@ -921,20 +921,20 @@ function TreeConnector({
               return (
                 <path
                   key={`path-${nextIndex}`}
-                  d={`M 0 ${yTo} H 42`}
+                  d={`M 0 ${yTo} H 44`}
                   stroke="currentColor"
                   strokeWidth="2.5"
                   vectorEffect="non-scaling-stroke"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className={isCompleted ? 'text-blue-500/60' : 'text-blue-500/40'}
+                  className={isCompleted ? 'text-blue-500/70' : 'text-blue-500/50'}
                 />
               );
             }
 
             if (feederIndices.length === 1) {
               const yFrom = yValues[0];
-              const pathD = `M 0 ${yFrom} H ${trunkX} V ${yTo} H 42`;
+              const pathD = `M 0 ${yFrom} H ${trunkX} V ${yTo} H 44`;
               return (
                 <path
                   key={`path-${nextIndex}`}
@@ -944,7 +944,7 @@ function TreeConnector({
                   vectorEffect="non-scaling-stroke"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className={isCompleted ? 'text-blue-500/60' : 'text-blue-500/40'}
+                  className={isCompleted ? 'text-blue-500/70' : 'text-blue-500/50'}
                 />
               );
             }
@@ -957,7 +957,7 @@ function TreeConnector({
               pathD += ` V ${yValues[i]} H 0 H ${trunkX}`;
             }
             // Retrace trunk to the destination Y, then branch right
-            pathD += ` V ${yTo} H 42`;
+            pathD += ` V ${yTo} H 44`;
 
             return (
               <path
@@ -968,20 +968,20 @@ function TreeConnector({
                 vectorEffect="non-scaling-stroke"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className={isCompleted ? 'text-blue-500/60' : 'text-blue-500/40'}
+                className={isCompleted ? 'text-blue-500/70' : 'text-blue-500/50'}
               />
             );
           })}
         </svg>
 
-        {/* Arrowheads centered at destination match Y positions */}
+        {/* Crisp glowing stream arrowheads pointing directly into destination match */}
         {routedGroups.map(({ nextIndex, yTo }) => (
           <div
             key={`arrow-${nextIndex}`}
-            className="absolute right-0 -translate-y-1/2 translate-x-1 pointer-events-none text-blue-400"
+            className="absolute right-0 -translate-y-1/2 flex items-center justify-center pointer-events-none"
             style={{ top: `${yTo}%` }}
           >
-            <ChevronRight className="w-3.5 h-3.5" />
+            <div className="w-0 h-0 border-y-[5px] border-y-transparent border-l-[8px] border-l-blue-400 drop-shadow-[0_0_8px_rgba(59,130,246,0.8)]" />
           </div>
         ))}
       </div>
